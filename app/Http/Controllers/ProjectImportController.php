@@ -7,6 +7,8 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use App\Helpers\XlsxParser;
 use App\Helpers\PermissionHelper;
+use App\Models\UserActivityLog;
+use Illuminate\Support\Facades\Session;
 
 class ProjectImportController extends Controller
 {
@@ -336,23 +338,49 @@ class ProjectImportController extends Controller
 
                 $created++;
             }
-            DB::commit();
+              DB::commit();
+
+            UserActivityLog::create([
+                'username'    => Session::get('username'),
+                'user_type'   => 'user',
+                'role'        => 'admin',
+
+                'action'      => 'IMPORT_PROJECTS',
+                'module'      => 'PROJECT',
+
+                'target_type' => 'projects',
+                'target_id'   => null,
+
+                'description' => "Import {$created} projects, update {$updated} projects",
+
+                'new_values'  => [
+                    'created' => $created,
+                    'updated' => $updated,
+                    'semester' => $semester,
+                    'year' => $year,
+                ],
+
+                'ip_address'  => request()->ip(),
+                'user_agent'  => request()->userAgent(),
+            ]);
+
+            session()->forget(['project_excel_preview', 'project_import_semester', 'project_import_year']);
+
+            $skippedExisting = count(array_filter($existingRows, fn($r) => $r['exam_datetime'] === null));
+            $msg = "Import สำเร็จ: สร้างใหม่ {$created} โครงงาน";
+            if ($updated)         $msg .= ", อัปเดตเวลาสอบ {$updated} โครงงาน";
+            if ($skippedExisting) $msg .= " (ข้าม {$skippedExisting} ที่ไม่มีวันสอบใน Excel)";
+
+            return redirect()->route('coordinator.projects.review')
+                ->with('success', $msg);
+
         } catch (\Exception $e) {
+
             DB::rollBack();
+
             return back()->with('error', 'เกิดข้อผิดพลาด: ' . $e->getMessage());
         }
-
-        session()->forget(['project_excel_preview', 'project_import_semester', 'project_import_year']);
-
-        $skippedExisting = count(array_filter($existingRows, fn($r) => $r['exam_datetime'] === null));
-        $msg = "Import สำเร็จ: สร้างใหม่ {$created} โครงงาน";
-        if ($updated)         $msg .= ", อัปเดตเวลาสอบ {$updated} โครงงาน";
-        if ($skippedExisting) $msg .= " (ข้าม {$skippedExisting} ที่ไม่มีวันสอบใน Excel)";
-
-        return redirect()->route('coordinator.projects.review')
-            ->with('success', $msg);
-    }
-
+}
     /**
      * Parse Thai exam date string to ['start' => 'YYYY-MM-DD HH:MM:SS', 'end' => 'YYYY-MM-DD HH:MM:SS'].
      * Input examples: "จ.18, 08:00 - 9.00"  "ศ. 22, 15:00 - 16:30"  "อ.19, 09.00 - 10:00"

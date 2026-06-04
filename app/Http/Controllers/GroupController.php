@@ -11,6 +11,7 @@ use App\Models\Project;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use App\Models\UserActivityLog;
 
 class GroupController extends Controller
 {
@@ -138,9 +139,36 @@ class GroupController extends Controller
                     ]);
                 }
             }
+        
+UserActivityLog::create([
+    'username'    => $student->username_std,
+    'user_type'   => 'student',
+    'student_id'  => $student->student_id,
+    'role'        => 'student',
 
+    'action'      => 'CREATE_GROUP',
+    'module'      => 'GROUP',
+
+    'target_type' => 'groups',
+    'target_id'   => $group->group_id,
+
+    'description' => "Student {$student->username_std} created group {$group->group_id}",
+
+  'new_values'  => json_encode([
+    'group_id' => $group->group_id,
+    'subject_code' => $group->subject_code,
+    'year' => $group->year,
+    'semester' => $group->semester,
+    'status_group' => $group->status_group,
+    'project_code' => $projectCode,
+]),
+
+    'ip_address'  => request()->ip(),
+    'user_agent'  => request()->userAgent(),
+]);
             DB::commit();
-            return redirect()->route('student.menu')->with('success', 'สร้างกลุ่มสำเร็จ');
+
+return redirect()->route('student.menu')->with('success', 'สร้างกลุ่มสำเร็จ');
 
         } catch (\Illuminate\Database\QueryException $e) {
             DB::rollback();
@@ -152,7 +180,7 @@ class GroupController extends Controller
         } catch (\Exception $e) {
             DB::rollback();
             \Log::error('GroupController::store Exception', ['msg' => $e->getMessage()]);
-            return back()->with('error', 'เกิดข้อผิดพลาด: ' . $e->getMessage());
+            dd($e->getMessage());
         }
     }
 
@@ -241,6 +269,7 @@ class GroupController extends Controller
             }
             
             $group = $groupMember->group;
+            $groupId = $group->group_id;
             
             // ลบ student ออกจากกลุ่ม
             $groupMember->delete();
@@ -276,8 +305,28 @@ class GroupController extends Controller
                 $message = 'คุณได้ออกจากกลุ่มเรียบร้อยแล้ว';
             }
             
-            DB::commit();
-            return redirect()->route('student.menu')->with('success', $message);
+            UserActivityLog::create([
+    'username'    => $student->username_std,
+    'user_type'   => 'student',
+    'student_id'  => $student->student_id,
+    'role'        => 'student',
+    'action'      => 'LEAVE_GROUP',
+    'module'      => 'GROUP',
+    'target_type' => 'groups',
+    'target_id'   => $group->group_id,
+    'description' => "Student {$student->username_std} left group {$group->group_id}",
+    'new_values'  => json_encode([
+    'group_id' => $group->group_id,
+    'remaining_members' => $remainingMembers,
+    'message' => $message,
+]),
+    'ip_address'  => request()->ip(),
+    'user_agent'  => request()->userAgent(),
+]);
+
+DB::commit();
+
+return redirect()->route('student.menu')->with('success', $message);
             
         } catch (\Exception $e) {
             DB::rollback();
