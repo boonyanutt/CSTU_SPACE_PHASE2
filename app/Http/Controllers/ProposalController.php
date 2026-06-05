@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Models\Project;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use App\Models\UserActivityLog;
 
 class ProposalController extends Controller
 {
@@ -77,14 +78,14 @@ class ProposalController extends Controller
         DB::beginTransaction();
         try {
             // สร้างข้อเสนอ
-            ProjectProposal::create([
-                'group_id' => $groupId,
-                'proposed_title' => $request->proposed_title,
-                'description' => $request->description,
-                'proposed_to' => $request->proposed_to,
-                'proposed_by' => Auth::guard('student')->user()->username_std,
-                'status' => 'pending'
-            ]);
+           $proposal = ProjectProposal::create([
+    'group_id' => $groupId,
+    'proposed_title' => $request->proposed_title,
+    'description' => $request->description,
+    'proposed_to' => $request->proposed_to,
+    'proposed_by' => Auth::guard('student')->user()->username_std,
+    'status' => 'pending'
+]);
             
             // อัพเดต project status เป็น pending
             if ($group->project) {
@@ -93,7 +94,32 @@ class ProposalController extends Controller
                     'project_name' => $request->proposed_title // เก็บชื่อโครงงานที่เสนอไว้ด้วย
                 ]);
             }
-            
+            $student = Auth::guard('student')->user();
+
+UserActivityLog::create([
+    'username'    => $student->username_std,
+    'user_type'   => 'student',
+    'student_id'  => $student->student_id,
+    'role'        => 'student',
+
+    'action'      => 'SUBMIT_PROPOSAL',
+    'module'      => 'PROPOSAL',
+
+    'target_type' => 'project_proposals',
+    'target_id'   => $proposal->proposal_id,
+
+    'description' => "Student {$student->username_std} submitted proposal {$request->proposed_title}",
+
+    'new_values'  => json_encode([
+        'group_id' => $groupId,
+        'title' => $request->proposed_title,
+        'lecturer' => $request->proposed_to,
+        'status' => 'pending',
+    ]),
+
+    'ip_address'  => request()->ip(),
+    'user_agent'  => request()->userAgent(),
+]);
             DB::commit();
             return redirect()->route('groups.show', $groupId)
                 ->with('success', 'ส่งข้อเสนอหัวข้อสำเร็จ รอการพิจารณาจากอาจารย์');
@@ -187,7 +213,28 @@ class ProposalController extends Controller
                     'sort_order'      => 1,
                 ]);
             }
-            
+            UserActivityLog::create([
+    'username'    => $user->username_user,
+    'user_type'   => 'lecturer',
+    'role'        => 'lecturer',
+
+    'action'      => 'APPROVE_PROPOSAL',
+    'module'      => 'PROPOSAL',
+
+    'target_type' => 'project_proposals',
+    'target_id'   => $proposal->proposal_id,
+
+    'description' => "Lecturer {$user->username_user} approved proposal {$proposal->proposal_id}",
+
+    'new_values'  => json_encode([
+        'group_id' => $proposal->group_id,
+        'status' => 'approved',
+        'project_code' => $newProjectCode ?? null,
+    ]),
+
+    'ip_address'  => request()->ip(),
+    'user_agent'  => request()->userAgent(),
+]);
             DB::commit();
             
             return redirect()->route('lecturer.proposals.index')
@@ -233,7 +280,28 @@ class ProposalController extends Controller
                     'status_project' => 'rejected'
                 ]);
             }
-            
+            UserActivityLog::create([
+    'username'    => $user->username_user,
+    'user_type'   => 'lecturer',
+    'role'        => 'lecturer',
+
+    'action'      => 'REJECT_PROPOSAL',
+    'module'      => 'PROPOSAL',
+
+    'target_type' => 'project_proposals',
+    'target_id'   => $proposal->proposal_id,
+
+    'description' => "Lecturer {$user->username_user} rejected proposal {$proposal->proposal_id}",
+
+    'new_values'  => json_encode([
+        'group_id' => $proposal->group_id,
+        'status' => 'rejected',
+        'reason' => $request->rejection_reason,
+    ]),
+
+    'ip_address'  => request()->ip(),
+    'user_agent'  => request()->userAgent(),
+]);
             DB::commit();
             
             return redirect()->route('lecturer.proposals.index')

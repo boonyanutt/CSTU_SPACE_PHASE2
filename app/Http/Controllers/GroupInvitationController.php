@@ -9,6 +9,7 @@ use App\Models\Project;
 use App\Models\Student;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use App\Models\UserActivityLog;
 
 class GroupInvitationController extends Controller
 {
@@ -89,7 +90,33 @@ class GroupInvitationController extends Controller
                 ]);
             }
 
-            DB::commit();
+            UserActivityLog::create([
+    'username'    => $student->username_std,
+    'user_type'   => 'student',
+    'student_id'  => $student->student_id,
+    'role'        => 'student',
+
+    'action'      => 'ACCEPT_INVITATION',
+    'module'      => 'GROUP',
+
+    'target_type' => 'group_invitations',
+    'target_id'   => $invitation->invitation_id,
+
+    'description' => "Student {$student->username_std} accepted invitation to group {$invitation->group_id}",
+
+    'new_values'  => json_encode([
+        'group_id' => $invitation->group_id,
+        'inviter_username' => $invitation->inviter_username,
+        'invitee_username' => $invitation->invitee_username,
+        'status' => 'accepted',
+        'project_code' => $projectCode ?? null,
+    ]),
+
+    'ip_address'  => request()->ip(),
+    'user_agent'  => request()->userAgent(),
+]);
+
+DB::commit();
             
             // เก็บข้อมูลสำหรับแจ้งเตือน
             $inviterStudent = Student::where('username_std', $invitation->inviter_username)->first();
@@ -125,7 +152,33 @@ class GroupInvitationController extends Controller
         // ปฏิเสธคำเชิญ
         $invitation->decline();
 
-        return redirect()->route('student.menu')->with('success', 'ปฏิเสธคำเชิญแล้ว');
+UserActivityLog::create([
+    'username'    => $student->username_std,
+    'user_type'   => 'student',
+    'student_id'  => $student->student_id,
+    'role'        => 'student',
+
+    'action'      => 'DECLINE_INVITATION',
+    'module'      => 'GROUP',
+
+    'target_type' => 'group_invitations',
+    'target_id'   => $invitation->invitation_id,
+
+    'description' => "Student {$student->username_std} declined invitation to group {$invitation->group_id}",
+
+    'new_values'  => json_encode([
+        'group_id' => $invitation->group_id,
+        'inviter_username' => $invitation->inviter_username,
+        'invitee_username' => $invitation->invitee_username,
+        'status' => 'declined',
+    ]),
+
+    'ip_address'  => request()->ip(),
+    'user_agent'  => request()->userAgent(),
+]);
+
+
+return redirect()->route('student.menu')->with('success', 'ปฏิเสธคำเชิญแล้ว');
     }
 
     public function index()
@@ -154,10 +207,35 @@ class GroupInvitationController extends Controller
         if (!$invitation->isPending()) {
             return redirect()->route('student.menu')->with('error', 'คำเชิญนี้ได้ดำเนินการแล้ว');
         }
+       $invitationData = [
+    'group_id' => $invitation->group_id,
+    'inviter_username' => $invitation->inviter_username,
+    'invitee_username' => $invitation->invitee_username,
+    'status' => $invitation->status,
+];
+$invitationId = $invitation->invitation_id;
+$invitation->delete();
 
-        // ลบคำเชิญ
-        $invitation->delete();
+UserActivityLog::create([
+    'username'    => $student->username_std,
+    'user_type'   => 'student',
+    'student_id'  => $student->student_id,
+    'role'        => 'student',
 
-        return redirect()->back()->with('success', 'ยกเลิกคำเชิญแล้ว');
+    'action'      => 'CANCEL_INVITATION',
+    'module'      => 'GROUP',
+
+    'target_type' => 'group_invitations',
+    'target_id' => $invitationId,
+
+    'description' => "Student {$student->username_std} cancelled invitation to {$invitationData['invitee_username']}",
+
+    'new_values'  => json_encode($invitationData),
+
+    'ip_address'  => request()->ip(),
+    'user_agent'  => request()->userAgent(),
+]);
+
+return redirect()->back()->with('success', 'ยกเลิกคำเชิญแล้ว');
     }
 }
