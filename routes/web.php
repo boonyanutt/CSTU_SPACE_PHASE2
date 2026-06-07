@@ -23,6 +23,7 @@ use App\Http\Controllers\SubjectController;
 use App\Http\Controllers\LecturerSubmissionController;
 use App\Http\Controllers\ExamScheduleController;
 use App\Http\Controllers\SubjectSummaryController;
+use App\Http\Controllers\AdminActivityLogController;
 
 /*
 |--------------------------------------------------------------------------
@@ -329,7 +330,11 @@ Route::middleware('session.timeout')->group(function () {
             Route::get('{log}', [AdminLogController::class, 'show'])->name('show');
             Route::get('export/csv', [AdminLogController::class, 'export'])->name('export');
         });
-        
+        // Activity Logs Management
+        Route::prefix('activity-logs')->name('activity-logs.')->middleware('role:admin')->group(function () {
+         Route::get('/', [AdminActivityLogController::class, 'index'])->name('index');
+        });
+
         // Subject Management (Admin + Staff)
         Route::prefix('subjects')->name('subjects.')->middleware('role:admin,staff')->group(function () {
             Route::get('/', [SubjectController::class, 'index'])->name('index');

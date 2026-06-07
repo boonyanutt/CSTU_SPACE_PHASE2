@@ -154,14 +154,14 @@ UserActivityLog::create([
 
     'description' => "Student {$student->username_std} created group {$group->group_id}",
 
-  'new_values'  => json_encode([
+  'new_values' => [
     'group_id' => $group->group_id,
     'subject_code' => $group->subject_code,
     'year' => $group->year,
     'semester' => $group->semester,
     'status_group' => $group->status_group,
     'project_code' => $projectCode,
-]),
+],
 
     'ip_address'  => request()->ip(),
     'user_agent'  => request()->userAgent(),
@@ -315,11 +315,11 @@ return redirect()->route('student.menu')->with('success', 'สร้างกล
     'target_type' => 'groups',
     'target_id'   => $group->group_id,
     'description' => "Student {$student->username_std} left group {$group->group_id}",
-    'new_values'  => json_encode([
-    'group_id' => $group->group_id,
-    'remaining_members' => $remainingMembers,
-    'message' => $message,
-]),
+    'new_values' => [
+        'group_id' => $group->group_id,
+        'remaining_members' => $remainingMembers,
+        'message' => $message,
+    ],
     'ip_address'  => request()->ip(),
     'user_agent'  => request()->userAgent(),
 ]);

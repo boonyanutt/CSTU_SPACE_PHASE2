@@ -110,13 +110,12 @@ UserActivityLog::create([
 
     'description' => "Student {$student->username_std} submitted proposal {$request->proposed_title}",
 
-    'new_values'  => json_encode([
+    'new_values' => [
         'group_id' => $groupId,
         'title' => $request->proposed_title,
         'lecturer' => $request->proposed_to,
         'status' => 'pending',
-    ]),
-
+],
     'ip_address'  => request()->ip(),
     'user_agent'  => request()->userAgent(),
 ]);
@@ -226,11 +225,11 @@ UserActivityLog::create([
 
     'description' => "Lecturer {$user->username_user} approved proposal {$proposal->proposal_id}",
 
-    'new_values'  => json_encode([
+    'new_values' => [
         'group_id' => $proposal->group_id,
         'status' => 'approved',
         'project_code' => $newProjectCode ?? null,
-    ]),
+],
 
     'ip_address'  => request()->ip(),
     'user_agent'  => request()->userAgent(),
@@ -293,11 +292,11 @@ UserActivityLog::create([
 
     'description' => "Lecturer {$user->username_user} rejected proposal {$proposal->proposal_id}",
 
-    'new_values'  => json_encode([
+    'new_values' => [
         'group_id' => $proposal->group_id,
         'status' => 'rejected',
         'reason' => $request->rejection_reason,
-    ]),
+],
 
     'ip_address'  => request()->ip(),
     'user_agent'  => request()->userAgent(),

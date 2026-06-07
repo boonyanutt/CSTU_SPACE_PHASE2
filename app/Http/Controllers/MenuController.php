@@ -222,53 +222,62 @@ class MenuController extends Controller
      * เมนู System Management สำหรับ Admin
      */
     private function getAdminSystemMenu()
-    {
-        return [
-            'title' => 'การจัดการระบบ',
-            'items' => [
-                [
-                    'title' => 'จัดการผู้ใช้',
-                    'description' => 'เพิ่ม/แก้ไข/ลบผู้ใช้ระบบ',
-                    'icon' => 'bi-people-fill',
-                    'url' => route('users.index'),
-                    'class' => 'primary-card',
-                    'btn_class' => 'primary-btn'
-                ],
-                [
-                    'title' => 'สถิติการใช้งาน',
-                    'description' => 'ดูสถิติการใช้งานระบบ',
-                    'icon' => 'bi-graph-up',
-                    'url' => route('statistics.index'),
-                    'class' => 'info-card',
-                    'btn_class' => 'info-btn'
-                ],
-                [
-                    'title' => 'ประวัติการเข้าสู่ระบบ',
-                    'description' => 'ติดตามประวัติการเข้าใช้งาน',
-                    'icon' => 'bi-shield-lock',
-                    'url' => route('admin.logs.index'),
-                    'class' => 'warning-card',
-                    'btn_class' => 'warning-btn'
-                ],
-                [
-                    'title' => 'เล่มโครงงานที่ส่ง',
-                    'description' => 'ดูเล่มโครงงานทั้งหมด',
-                    'icon' => 'bi-file-pdf-fill',
-                    'url' => route('admin.submissions.index'),
-                    'class' => 'info-card',
-                    'btn_class' => 'info-btn'
-                ],
-                [
-                    'title' => 'จัดการรายวิชา',
-                    'description' => 'กำหนดช่วงเวลาเปิด-ปิดรายวิชา',
-                    'icon' => 'bi-book-fill',
-                    'url' => route('admin.subjects.index'),
-                    'class' => 'danger-card',
-                    'btn_class' => 'danger-btn'
-                ]
-            ]
-        ];
-    }
+{
+return [
+'title' => 'การจัดการระบบ',
+'items' => [
+[
+'title' => 'จัดการผู้ใช้',
+'description' => 'เพิ่ม/แก้ไข/ลบผู้ใช้ระบบ',
+'icon' => 'bi-people-fill',
+'url' => route('users.index'),
+'class' => 'primary-card',
+'btn_class' => 'primary-btn'
+],
+[
+'title' => 'สถิติการใช้งาน',
+'description' => 'ดูสถิติการใช้งานระบบ',
+'icon' => 'bi-graph-up',
+'url' => route('statistics.index'),
+'class' => 'info-card',
+'btn_class' => 'info-btn'
+],
+[
+'title' => 'ประวัติการเข้าสู่ระบบ',
+'description' => 'ติดตามประวัติการเข้าใช้งาน',
+'icon' => 'bi-shield-lock',
+'url' => route('admin.logs.index'),
+'class' => 'warning-card',
+'btn_class' => 'warning-btn'
+],
+[
+'title' => 'เล่มโครงงานที่ส่ง',
+'description' => 'ดูเล่มโครงงานทั้งหมด',
+'icon' => 'bi-file-pdf-fill',
+'url' => route('admin.submissions.index'),
+'class' => 'info-card',
+'btn_class' => 'info-btn'
+],
+[
+'title' => 'จัดการรายวิชา',
+'description' => 'กำหนดช่วงเวลาเปิด-ปิดรายวิชา',
+'icon' => 'bi-book-fill',
+'url' => route('admin.subjects.index'),
+'class' => 'danger-card',
+'btn_class' => 'danger-btn'
+],
+[
+'title' => 'ประวัติการใช้งานระบบ',
+'description' => 'ติดตามการเปลี่ยนแปลงข้อมูลของผู้ใช้งาน',
+'icon' => 'bi-clock-history',
+'url' => route('admin.activity-logs.index'),
+'class' => 'warning-card',
+'btn_class' => 'warning-btn'
+]
+]
+];
+}
+
 
     /**
      * เมนู Project Management สำหรับ Coordinator

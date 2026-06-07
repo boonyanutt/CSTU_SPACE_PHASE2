@@ -104,14 +104,13 @@ class GroupInvitationController extends Controller
 
     'description' => "Student {$student->username_std} accepted invitation to group {$invitation->group_id}",
 
-    'new_values'  => json_encode([
+    'new_values' => [
         'group_id' => $invitation->group_id,
         'inviter_username' => $invitation->inviter_username,
         'invitee_username' => $invitation->invitee_username,
         'status' => 'accepted',
         'project_code' => $projectCode ?? null,
-    ]),
-
+],
     'ip_address'  => request()->ip(),
     'user_agent'  => request()->userAgent(),
 ]);
@@ -166,12 +165,12 @@ UserActivityLog::create([
 
     'description' => "Student {$student->username_std} declined invitation to group {$invitation->group_id}",
 
-    'new_values'  => json_encode([
+    'new_values' => [
         'group_id' => $invitation->group_id,
         'inviter_username' => $invitation->inviter_username,
         'invitee_username' => $invitation->invitee_username,
-        'status' => 'declined',
-    ]),
+      'status' => 'declined',
+],
 
     'ip_address'  => request()->ip(),
     'user_agent'  => request()->userAgent(),
