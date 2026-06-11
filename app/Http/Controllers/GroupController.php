@@ -334,4 +334,117 @@ return redirect()->route('student.menu')->with('success', $message);
             return redirect()->route('student.menu')->with('error', 'เกิดข้อผิดพลาดในการออกจากกลุ่ม: ' . $e->getMessage());
         }
     }
+  public function confirmTopic2(Group $group)
+{
+    $student = Auth::guard('student')->user();
+
+    $member = GroupMember::where('group_id', $group->group_id)
+        ->where('username_std', $student->username_std)
+        ->first();
+
+    if (!$member) {
+        return redirect()->back()->with('error', 'คุณไม่ใช่สมาชิกของกลุ่มนี้');
+    }
+
+    $oldValues = [
+        'topic2_confirmation_status' => $member->topic2_confirmation_status,
+        'topic2_confirmed_at' => $member->topic2_confirmed_at,
+        'confirmation_remark' => $member->confirmation_remark,
+    ];
+
+    $member->update([
+        'topic2_confirmation_status' => 'confirmed',
+        'topic2_confirmed_at' => now(),
+        'confirmation_remark' => null,
+    ]);
+
+    UserActivityLog::create([
+        'username' => $student->username_std,
+        'user_type' => 'student',
+        'student_id' => $student->student_id,
+        'role' => 'student',
+
+        'action' => 'CONFIRM_TOPIC2',
+        'module' => 'GROUP',
+
+        'target_type' => 'group_members',
+        'target_id' => $member->groupmem_id,
+
+        'description' => "Student {$student->username_std} confirmed Topic 2 continuation for group {$group->group_id}",
+
+        'old_values' => $oldValues,
+        'new_values' => [
+            'group_id' => $group->group_id,
+            'username_std' => $student->username_std,
+            'topic2_confirmation_status' => 'confirmed',
+            'topic2_confirmed_at' => $member->topic2_confirmed_at,
+            'confirmation_remark' => null,
+        ],
+
+        'ip_address' => request()->ip(),
+        'user_agent' => request()->userAgent(),
+    ]);
+
+    return redirect()->back()->with('success', 'ยืนยันทำต่อหัวข้อโครงงานเดิมเรียบร้อยแล้ว');
+}
+
+public function rejectTopic2(Request $request, Group $group)
+{
+    $student = Auth::guard('student')->user();
+
+    $member = GroupMember::where('group_id', $group->group_id)
+        ->where('username_std', $student->username_std)
+        ->first();
+
+    if (!$member) {
+        return redirect()->back()->with('error', 'คุณไม่ใช่สมาชิกของกลุ่มนี้');
+    }
+
+    $request->validate([
+    'confirmation_remark' => 'required|string|max:1000',
+]);
+
+$remark = $request->confirmation_remark;
+
+    $oldValues = [
+        'topic2_confirmation_status' => $member->topic2_confirmation_status,
+        'topic2_confirmed_at' => $member->topic2_confirmed_at,
+        'confirmation_remark' => $member->confirmation_remark,
+    ];
+
+    $member->update([
+        'topic2_confirmation_status' => 'rejected',
+        'topic2_confirmed_at' => now(),
+        'confirmation_remark' => $remark,
+    ]);
+
+    UserActivityLog::create([
+        'username' => $student->username_std,
+        'user_type' => 'student',
+        'student_id' => $student->student_id,
+        'role' => 'student',
+
+        'action' => 'REJECT_TOPIC2',
+        'module' => 'GROUP',
+
+        'target_type' => 'group_members',
+        'target_id' => $member->groupmem_id,
+
+        'description' => "Student {$student->username_std} rejected Topic 2 continuation for group {$group->group_id}",
+
+        'old_values' => $oldValues,
+        'new_values' => [
+            'group_id' => $group->group_id,
+            'username_std' => $student->username_std,
+            'topic2_confirmation_status' => 'rejected',
+            'topic2_confirmed_at' => $member->topic2_confirmed_at,
+            'confirmation_remark' => $remark,
+        ],
+
+        'ip_address' => request()->ip(),
+        'user_agent' => request()->userAgent(),
+    ]);
+
+    return redirect()->back()->with('success', 'บันทึกสถานะไม่ดำเนินการต่อเรียบร้อยแล้ว');
+}
 }

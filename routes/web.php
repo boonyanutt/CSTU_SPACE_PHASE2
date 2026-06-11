@@ -80,12 +80,19 @@ Route::middleware(['auth:student', 'check.subject.access', 'session.timeout'])->
     
     // Group Management Routes
     Route::prefix('groups')->name('groups.')->group(function () {
-        Route::get('create', [GroupController::class, 'create'])->name('create');
-        Route::post('store', [GroupController::class, 'store'])->name('store');
-        Route::get('{group}', [GroupController::class, 'show'])->name('show');
-        Route::get('search/students', [GroupController::class, 'searchStudents'])->name('search-students');
-        Route::post('leave', [GroupController::class, 'leaveGroup'])->name('leave');
-    });
+    Route::get('create', [GroupController::class, 'create'])->name('create');
+    Route::post('store', [GroupController::class, 'store'])->name('store');
+
+    Route::post('{group}/topic2/confirm', [GroupController::class, 'confirmTopic2'])
+        ->name('topic2.confirm');
+
+    Route::post('{group}/topic2/reject', [GroupController::class, 'rejectTopic2'])
+        ->name('topic2.reject');
+
+    Route::get('{group}', [GroupController::class, 'show'])->name('show');
+    Route::get('search/students', [GroupController::class, 'searchStudents'])->name('search-students');
+    Route::post('leave', [GroupController::class, 'leaveGroup'])->name('leave');
+});
     
     // Group Invitation Management Routes
     Route::prefix('invitations')->name('invitations.')->group(function () {

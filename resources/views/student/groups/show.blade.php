@@ -104,6 +104,22 @@
             font-size: 1.1rem;
             margin-bottom: 1.5rem;
         }
+        .topic2-action-box {
+        background: #f8fafc;
+        border: 1px solid #e5e7eb;
+        border-radius: 14px;
+        padding: 12px;
+        max-width: 420px;
+        }
+
+        .topic2-action-box .btn {
+         border-radius: 10px;
+        font-weight: 600;
+        }
+
+        .topic2-action-box .form-select {
+         border-radius: 10px;
+        }
     </style>
 </head>
 <body>
@@ -210,38 +226,85 @@
                     </div>
                 </div>
             </div>
+<!-- Members -->
+<div class="col-lg-6 mb-4">
+    <div class="card h-100">
+        <div class="card-header">
+            <i class="bi bi-people me-2"></i>สมาชิกกลุ่ม ({{ $group->members->count() }}/2)
+        </div>
 
-            <!-- Members -->
-            <div class="col-lg-6 mb-4">
-                <div class="card h-100">
-                    <div class="card-header">
-                        <i class="bi bi-people me-2"></i>สมาชิกกลุ่ม ({{ $group->members->count() }}/2)
-                    </div>
-                    <div class="card-body">
-                        <div class="list-group">
-                            @foreach($group->members as $index => $member)
-                            <div class="list-group-item border-0 mb-3">
-                                <div class="d-flex align-items-center">
-                                    <div class="me-3">
-                                        <span class="member-badge bg-primary text-white">
-                                            {{ $index + 1 }}
-                                        </span>
-                                    </div>
-                                    <div>
-                                        <h6 class="mb-0">{{ $member->student->firstname_std ?? 'N/A' }} {{ $member->student->lastname_std ?? '' }}</h6>
-                                        <small class="text-muted">{{ $member->username_std }}</small>
-                                        @if($index === 0)
-                                            <span class="badge bg-info ms-2">ผู้สร้างกลุ่ม</span>
-                                        @endif
-                                    </div>
-                                </div>
+        <div class="card-body">
+            <div class="list-group">
+                @foreach($group->members as $index => $member)
+                    <div class="list-group-item border-0 mb-3">
+                        <div class="d-flex align-items-start">
+                            <div class="me-3">
+                                <span class="member-badge bg-primary text-white">
+                                    {{ $index + 1 }}
+                                </span>
                             </div>
-                            @endforeach
+
+                            <div class="flex-grow-1">
+                                <h6 class="mb-0">
+                                    {{ $member->student->firstname_std ?? 'N/A' }}
+                                    {{ $member->student->lastname_std ?? '' }}
+                                </h6>
+
+                                <small class="text-muted">{{ $member->username_std }}</small>
+
+                                @if($index === 0)
+                                    <span class="badge bg-info ms-2">ผู้สร้างกลุ่ม</span>
+                                @endif
+
+                                <div class="mt-2">
+                                    @if($member->topic2_confirmation_status === 'confirmed')
+                                        <span class="badge bg-success">✓ ยืนยันทำต่อหัวข้อเดิม</span>
+                                    @elseif($member->topic2_confirmation_status === 'rejected')
+                                        <span class="badge bg-danger">✗ ไม่ดำเนินการต่อ</span>
+                                    @else
+                                        <span class="badge bg-warning text-dark">รอการยืนยัน</span>
+                                    @endif
+                                </div>
+
+                               @if(auth()->guard('student')->user()->username_std == $member->username_std
+    && $member->topic2_confirmation_status === 'pending')
+
+    <div class="topic2-action-box mt-3">
+        <form method="POST" action="{{ url('/groups/' . $group->group_id . '/topic2/confirm') }}">
+            @csrf
+            <button type="submit" class="btn btn-success btn-sm w-100 mb-2">
+                <i class="bi bi-check-circle me-1"></i> ยืนยันทำต่อหัวข้อเดิม
+            </button>
+        </form>
+
+        <form method="POST" action="{{ url('/groups/' . $group->group_id . '/topic2/reject') }}">
+            @csrf
+
+            <div class="d-flex gap-2">
+                <select name="confirmation_remark" class="form-select form-select-sm" required>
+                    <option value="">เลือกเหตุผลที่ไม่ดำเนินการต่อ</option>
+                    <option value="เปลี่ยนหัวข้อใหม่">เปลี่ยนหัวข้อใหม่</option>
+                    <option value="ไม่ประสงค์ดำเนินการต่อ">ไม่ประสงค์ดำเนินการต่อ</option>
+                    <option value="สมาชิกไม่ครบ">สมาชิกไม่ครบ</option>
+                    <option value="อื่น ๆ">อื่น ๆ</option>
+                </select>
+
+                <button type="submit" class="btn btn-danger btn-sm">
+                    ไม่ดำเนินการต่อ
+                </button>
+            </div>
+        </form>
+    </div>
+
+@endif
+                            </div>
                         </div>
                     </div>
-                </div>
+                @endforeach
             </div>
-
+        </div>
+    </div>
+</div>
             <!-- Project Information -->
             <div class="col-12">
                 @if($group->project)
