@@ -25,7 +25,8 @@ class Student extends Authenticatable
         'student_type',
         'username_std',
         'password_std',
-        'role'
+        'role',
+        'grade_cs303',
     ];
 
     protected $hidden = [
@@ -101,4 +102,23 @@ class Student extends Authenticatable
     {
         return $this->belongsTo(Role::class, 'role', 'role');
     }
+    public function hasPassedCS303()
+{
+    $gradeMap = [
+        'A'  => 4.0,
+        'B+' => 3.5,
+        'B'  => 3.0,
+        'C+' => 2.5,
+        'C'  => 2.0,
+        'D+' => 1.5,
+        'D'  => 1.0,
+        'F'  => 0,
+    ];
+
+    if (!$this->grade_cs303) {
+        return false;
+    }
+
+    return ($gradeMap[$this->grade_cs303] ?? 0) >= 2.0;
+}
 }
