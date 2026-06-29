@@ -18,7 +18,13 @@ class GroupController extends Controller
     public function create()
     {
         $student = Auth::guard('student')->user();
-        
+
+        if (!$student->hasPassedCS303()) {
+            return redirect()
+                ->route('student.menu')
+                ->with('error', 'ไม่สามารถดำเนินการ Topic 2 ได้ เนื่องจากยังไม่ผ่านวิชา CS303');
+    }
+
         // ตรวจสอบว่า student มีกลุ่มแล้วหรือยัง
         if ($student->hasGroup()) {
             return redirect()->route('student.menu')->with('error', 'คุณมีกลุ่มแล้ว');
@@ -57,6 +63,12 @@ class GroupController extends Controller
     public function store(Request $request)
     {
         $student = Auth::guard('student')->user();
+       
+        if (!$student->hasPassedCS303()) {
+            return redirect()
+                ->route('student.menu')
+                ->with('error','ไม่สามารถดำเนินการ Topic 2 ได้ เนื่องจากยังไม่ผ่านวิชา CS303');
+        }
 
         // ตรวจสอบว่า student มีกลุ่มแล้วหรือยัง
         if ($student->hasGroup()) {

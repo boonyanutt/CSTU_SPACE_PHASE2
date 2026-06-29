@@ -17,6 +17,14 @@ class ProposalController extends Controller
     public function create($groupId)
     {
         $group = Group::with(['members.student', 'latestProposal'])->findOrFail($groupId);
+
+        $student = Auth::guard('student')->user();
+
+    if (!$student->hasPassedCS303()) {
+        return redirect()
+            ->route('student.menu')
+            ->with('error', 'ไม่สามารถเสนอหัวข้อ Topic 2 ได้ เนื่องจากยังไม่ผ่านวิชา CS303');
+    }
         
         // ตรวจสอบว่าเป็นหัวหน้ากลุ่ม (สมาชิกคนแรก)
         $firstMember = $group->members()->orderBy('groupmem_id', 'asc')->first();
@@ -46,6 +54,14 @@ class ProposalController extends Controller
     public function store(Request $request, $groupId)
     {
         $group = Group::with(['members', 'project'])->findOrFail($groupId);
+
+        $student = Auth::guard('student')->user();
+
+        if (!$student->hasPassedCS303()) {
+            return redirect()
+                ->route('student.menu')
+                ->with('error', 'ไม่สามารถเสนอหัวข้อ Topic 2 ได้ เนื่องจากยังไม่ผ่านวิชา CS303');
+        }
         
         // ตรวจสอบสิทธิ์
         $firstMember = $group->members()->orderBy('groupmem_id', 'asc')->first();
