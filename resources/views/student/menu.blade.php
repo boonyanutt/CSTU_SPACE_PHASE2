@@ -467,6 +467,41 @@
             </div>
         @endif
 
+        {{-- ผลการเรียน CS303 --}}
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="dashboard-card p-4">
+
+                    <h4 class="fw-bold mb-3">
+                        <i class="bi bi-mortarboard-fill me-2"></i>
+                        ผลการเรียน CS303
+                    </h4>
+
+                    <p class="mb-3">
+                        <strong>เกรด:</strong>
+                        {{ $student->grade_cs303 ?? 'ยังไม่มีเกรด' }}
+                    </p>
+
+                    @if($student->hasPassedCS303())
+
+                        <div class="alert alert-success mb-0">
+                            <i class="bi bi-check-circle-fill me-2"></i>
+                            คุณผ่านวิชา CS303 และมีสิทธิ์ดำเนินโครงงานต่อใน CS403
+                        </div>
+
+                    @else
+
+                        <div class="alert alert-danger mb-0">
+                            <i class="bi bi-x-circle-fill me-2"></i>
+                            คุณยังไม่ผ่านเงื่อนไข CS303
+                        </div>
+
+                    @endif
+
+                </div>
+            </div>
+        </div>
+
         @if(session('error'))
             <div class="alert alert-danger alert-dismissible fade show" role="alert">
                 <i class="fas fa-exclamation-circle me-2"></i>{{ session('error') }}
@@ -663,6 +698,34 @@
                                 </li>
                                 @endforeach
                             </ul>
+                            @php
+                                $currentMember = $myGroup->members
+                                    ->firstWhere('username_std', $student->username_std);
+
+                                $topic2Status = $currentMember
+                                    ? $currentMember->topic2_confirmation_status
+                                    : 'pending';
+                            @endphp
+
+                            <div class="mt-3">
+                                <strong>สถานะ:</strong>
+
+                                @if($topic2Status == 'pending')
+                                    <span class="badge bg-warning text-dark">
+                                        รอการยืนยัน
+                                    </span>
+
+                                @elseif($topic2Status == 'confirmed')
+                                    <span class="badge bg-success">
+                                        ยืนยันทำต่อแล้ว
+                                    </span>
+
+                                @elseif($topic2Status == 'rejected')
+                                    <span class="badge bg-danger">
+                                        ไม่ดำเนินโครงงานต่อ
+                                    </span>
+                                @endif
+                            </div>
                         </div>
                         <div class="col-md-4 text-end">
                             <div class="d-flex flex-column gap-3">
