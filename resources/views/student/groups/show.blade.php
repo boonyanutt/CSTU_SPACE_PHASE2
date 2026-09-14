@@ -266,37 +266,59 @@
                                     @endif
                                 </div>
 
-                               @if(auth()->guard('student')->user()->username_std == $member->username_std
-    && $member->topic2_confirmation_status === 'pending')
+                               @if(auth()->guard('student')->user()->username_std === $member->username_std
+                                    && $member->topic2_confirmation_status === 'pending')
 
-    <div class="topic2-action-box mt-3">
-        <form method="POST" action="{{ url('/groups/' . $group->group_id . '/topic2/confirm') }}">
-            @csrf
-            <button type="submit" class="btn btn-success btn-sm w-100 mb-2">
-                <i class="bi bi-check-circle me-1"></i> ยืนยันทำต่อหัวข้อเดิม
-            </button>
-        </form>
+                                    <div class="topic2-action-box mt-3">
 
-        <form method="POST" action="{{ url('/groups/' . $group->group_id . '/topic2/reject') }}">
-            @csrf
+                                        {{-- ตรวจสอบว่าเกรด CS303 ผ่าน C หรือไม่ --}}
+                                        @if(auth()->guard('student')->user()->hasPassedCS303())
 
-            <div class="d-flex gap-2">
-                <select name="confirmation_remark" class="form-select form-select-sm" required>
-                    <option value="">เลือกเหตุผลที่ไม่ดำเนินการต่อ</option>
-                    <option value="เปลี่ยนหัวข้อใหม่">เปลี่ยนหัวข้อใหม่</option>
-                    <option value="ไม่ประสงค์ดำเนินการต่อ">ไม่ประสงค์ดำเนินการต่อ</option>
-                    <option value="สมาชิกไม่ครบ">สมาชิกไม่ครบ</option>
-                    <option value="อื่น ๆ">อื่น ๆ</option>
-                </select>
+                                            {{-- ========================= --}}
+                                            {{-- ผ่าน CS303 --}}
+                                            {{-- ========================= --}}
 
-                <button type="submit" class="btn btn-danger btn-sm">
-                    ไม่ดำเนินการต่อ
-                </button>
-            </div>
-        </form>
-    </div>
+                                            {{-- ยืนยันทำต่อหัวข้อเดิม --}}
+                                            <form method="POST"
+                                                action="{{ url('/groups/' . $group->group_id . '/topic2/confirm') }}">
+                                                @csrf
 
-@endif
+                                                <button type="submit"
+                                                        class="btn btn-success btn-sm w-100 mb-2">
+                                                    <i class="bi bi-check-circle me-1"></i>
+                                                    ยืนยันทำต่อหัวข้อเดิม
+                                                </button>
+                                            </form>
+
+
+                                            {{-- ========================= --}}
+                                            {{-- ไม่ดำเนินการต่อ --}}
+                                            {{-- ========================= --}}
+
+                                            {{-- ให้นำ form เดิมของ
+                                                "เลือกเหตุผลที่ไม่ดำเนินการต่อ"
+                                                และปุ่ม "ไม่ดำเนินการต่อ"
+                                                มาไว้ตรงนี้
+                                            --}}
+
+
+                                        @else
+
+                                            {{-- ========================= --}}
+                                            {{-- เกรดต่ำกว่า C --}}
+                                            {{-- แสดงข้อความอย่างเดียว --}}
+                                            {{-- ========================= --}}
+
+                                            <div class="alert alert-danger py-2 mb-0">
+                                                <i class="bi bi-x-circle me-1"></i>
+                                                ไม่สามารถยืนยันทำโครงงานต่อได้ เนื่องจากเกรด CS303 ต่ำกว่า C
+                                            </div>
+
+                                        @endif
+
+                                    </div>
+
+                                @endif
                             </div>
                         </div>
                     </div>

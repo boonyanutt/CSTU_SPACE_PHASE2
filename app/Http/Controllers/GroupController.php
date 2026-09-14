@@ -350,6 +350,11 @@ return redirect()->route('student.menu')->with('success', $message);
 {
     $student = Auth::guard('student')->user();
 
+    if (!$student->hasPassedCS303()) {
+    return redirect()->back()
+        ->with('error', 'ไม่สามารถยืนยันทำโครงงานต่อได้ เนื่องจากเกรด CS303 ต่ำกว่า C');
+}
+
     $member = GroupMember::where('group_id', $group->group_id)
         ->where('username_std', $student->username_std)
         ->first();
