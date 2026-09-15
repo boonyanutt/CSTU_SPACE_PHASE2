@@ -17,11 +17,27 @@
         background:linear-gradient(135deg,#2E75B6,#1F4E79);
         color:white; border:none; font-weight:600; white-space:nowrap;
     }
-    .row-new    { background:#f0fff4; }
-    .row-exists { background:#fffbea; }
-    .pill-new    { background:#dcfce7; color:#166534; }
-    .pill-exists { background:#fef9c3; color:#854d0e; }
-    .status-pill { display:inline-block; font-size:.73rem; font-weight:600; padding:.18rem .55rem; border-radius:20px; }
+    .row-new       { background:#f0fff4; }
+.row-exists    { background:#fffbea; }
+.row-update    { background:#eff6ff; }
+.row-match     { background:#ecfdf5; }
+.row-conflict  { background:#fef2f2; }
+.row-invalid   { background:#fef2f2; }
+
+.pill-new      { background:#dcfce7; color:#166534; }
+.pill-exists   { background:#fef9c3; color:#854d0e; }
+.pill-update   { background:#dbeafe; color:#1e40af; }
+.pill-match    { background:#d1fae5; color:#065f46; }
+.pill-conflict { background:#fee2e2; color:#991b1b; }
+.pill-invalid  { background:#fee2e2; color:#991b1b; }
+
+.status-pill {
+    display:inline-block;
+    font-size:.73rem;
+    font-weight:600;
+    padding:.18rem .55rem;
+    border-radius:20px;
+}
     .stats-bar { display:flex; gap:1rem; flex-wrap:wrap; margin-bottom:1rem; }
     .stats-chip { flex:1; min-width:120px; text-align:center; border-radius:10px; padding:.6rem 1rem; font-weight:600; }
     .chip-new   { background:#dcfce7; color:#166534; }
@@ -144,17 +160,17 @@
                     <div class="stats-chip chip-exist">⚠ มีอยู่แล้ว: {{ $exists ?? 0 }} คน</div>
                 </div>
 
-                @if(($new ?? 0) > 0)
+               @if(($new ?? 0) > 0 || ($gradeUpdates ?? 0) > 0)
                 <form method="POST" action="{{ route('students.importExcelConfirm') }}" id="confirmForm">
                     @csrf
                     <div class="d-flex justify-content-between align-items-center mb-3 gap-2 flex-wrap">
                         <div class="text-muted small">
                             <i class="bi bi-info-circle me-1"></i>
-                            แถวสีเหลืองจะถูกข้าม — กด <strong>ยืนยัน</strong> เพื่อสร้างบัญชีใหม่ {{ $new }} คน
+                           กด <strong>ยืนยัน</strong>เพื่อเพิ่มนักศึกษาใหม่ {{ $new ?? 0 }} คนและอัปเดตเกรด CS303 {{ $gradeUpdates ?? 0 }} คน
                         </div>
                         <button type="submit" class="btn btn-success btn-sm fw-semibold px-4">
                             <i class="bi bi-person-plus-fill me-2"></i>ยืนยัน Import
-                            ({{ $new }} คน)
+({{ ($new ?? 0) + ($gradeUpdates ?? 0) }} คน)
                         </button>
                     </div>
                 </form>
@@ -178,19 +194,69 @@
                                 <th style="min-width:170px;">Email</th>
                                 <th>เบอร์</th>
                                 <th>วิชา</th>
+                                <th>เกรด CS303</th>
                                 <th>ประเภท</th>
                             </tr>
                         </thead>
                         <tbody>
                             @foreach($preview as $i => $item)
-                            <tr class="{{ $item['status'] === 'new' ? 'row-new' : 'row-exists' }}">
+                       @php
+                             $rowClass = match($item['status']) {
+                             'new'            => 'row-new',
+                             'exists'         => 'row-exists',
+                             'grade_update'   => 'row-update',
+                             'grade_match'    => 'row-match',
+                             'grade_conflict' => 'row-conflict',
+                             'invalid_grade'  => 'row-invalid',
+                             default          => 'row-exists',
+                         };
+                        @endphp
+
+<tr class="{{ $rowClass }}">
                                 <td class="text-center text-muted">{{ $i + 1 }}</td>
                                 <td>
-                                    @if($item['status'] === 'new')
-                                        <span class="status-pill pill-new">✓ ใหม่</span>
-                                    @else
-                                        <span class="status-pill pill-exists">⚠ มีอยู่แล้ว</span>
-                                    @endif
+     @if($item['status'] === 'new')
+
+    <span class="status-pill pill-new">
+        ✓ ใหม่
+    </span>
+
+@elseif($item['status'] === 'grade_update')
+
+    <span class="status-pill pill-update">
+        ↑ เพิ่มเกรด
+    </span>
+
+@elseif($item['status'] === 'grade_match')
+
+    <span class="status-pill pill-match">
+        ✓ เกรดตรงกัน
+    </span>
+
+@elseif($item['status'] === 'grade_conflict')
+
+    <span class="status-pill pill-conflict">
+        ⚠ เกรดไม่ตรง
+    </span>
+
+    <div class="small text-danger mt-1">
+        DB: {{ $item['db_grade'] ?? '-' }}
+        / Excel: {{ $item['grade_cs303'] ?? '-' }}
+    </div>
+
+@elseif($item['status'] === 'invalid_grade')
+
+    <span class="status-pill pill-invalid">
+        ✗ เกรดไม่ถูกต้อง
+    </span>
+
+@else
+
+    <span class="status-pill pill-exists">
+        มีอยู่แล้ว
+    </span>
+
+@endif
                                 </td>
                                 <td>{{ $item['prefix'] }}</td>
                                 <td class="fw-semibold">{{ $item['firstname_std'] }}</td>
@@ -203,6 +269,9 @@
                                         {{ $item['course_code'] }}
                                     </span>
                                 </td>
+                                <td class="text-center">
+                                        {{ $item['grade_cs303'] ?? '-' }}
+                                    </td>
                                 <td>
                                     <span class="type-pill {{ $item['student_type'] === 's' ? 'type-s' : 'type-r' }}">
                                         {{ $item['student_type'] === 's' ? 'พิเศษ' : 'ปกติ' }}

@@ -182,7 +182,22 @@
                 </div>
             </div>
         </div>
+        @if($allComplete && $project->group->subject_code === 'CS303')
+    <form method="POST"
+         action="{{ url('/coordinator/evaluations/' . $project->project_id . '/scores/finalize') }}"
+          class="mt-3"
+          onsubmit="return confirm('ยืนยันผลคะแนนและบันทึกเกรด CS303 ใช่หรือไม่?')">
+
+        @csrf
+
+        <button type="submit" class="btn btn-success">
+            <i class="bi bi-check-circle me-1"></i>
+            ยืนยันผลคะแนนและบันทึกเกรด
+        </button>
+    </form>
+@endif
     </div>
+
 
     {{-- Evaluator status --}}
     <div class="section-card card mb-4">

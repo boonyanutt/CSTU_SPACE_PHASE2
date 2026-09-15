@@ -950,4 +950,166 @@ class CoordinatorController extends Controller
 
         return view('coordinator.evaluations.scores', compact('project', 'criteria'));
     }
+    public function finalizeGrades($projectId)
+{
+    $project = Project::with([
+        'group.members.student',
+        'evaluations'
+    ])->findOrFail($projectId);
+
+    // การบันทึกเกรดชุดนี้ใช้สำหรับ CS303 เท่านั้น
+    if (!$project->group || $project->group->subject_code !== 'CS303') {
+        return redirect()->back()
+            ->with('error', 'สามารถยืนยันเกรดได้เฉพาะโครงงานวิชา CS303');
+    }
+
+    // ผู้ประเมินที่โครงงานนี้มีจริง
+    $activeRoles = collect([
+        'advisor',
+        'committee1',
+        'committee2',
+        'committee3'
+    ])->filter(function ($role) use ($project) {
+        return !empty($project->{$role . '_code'});
+    })->values();
+
+    if ($activeRoles->isEmpty()) {
+        return redirect()->back()
+            ->with('error', 'ไม่พบผู้ประเมินของโครงงานนี้');
+    }
+
+    $members = $project->group->members;
+
+    if ($members->isEmpty()) {
+        return redirect()->back()
+            ->with('error', 'ไม่พบนักศึกษาในกลุ่มนี้');
+    }
+
+    /*
+     * STEP 1
+     * ตรวจให้ครบก่อนทุกคน
+     *
+     * ถ้ายังมีใครได้คะแนนไม่ครบ
+     * จะไม่บันทึกเกรดให้ใครเลย
+     */
+    foreach ($members as $member) {
+
+        $student = $member->student;
+
+        if (!$student) {
+            return redirect()->back()
+                ->with('error', 'พบสมาชิกที่ไม่มีข้อมูลนักศึกษา');
+        }
+
+        $evaluations = $project->evaluations
+            ->where('student_id', $student->student_id);
+
+        $submittedRoles = $evaluations
+            ->pluck('evaluator_role')
+            ->unique();
+
+        foreach ($activeRoles as $role) {
+
+            if (!$submittedRoles->contains($role)) {
+                return redirect()->back()
+                    ->with(
+                        'error',
+                        'ยังไม่สามารถยืนยันเกรดได้ เนื่องจากคะแนนของ '
+                        . $student->firstname_std . ' '
+                        . $student->lastname_std
+                        . ' ยังไม่ครบ'
+                    );
+            }
+        }
+    }
+
+    /*
+     * STEP 2
+     * เมื่อคะแนนของทุกคนครบแล้ว
+     * คำนวณ Final Score + Grade
+     */
+    DB::transaction(function () use ($project, $members) {
+
+        foreach ($members as $member) {
+
+            $student = $member->student;
+
+            $evaluations = $project->evaluations
+                ->where('student_id', $student->student_id);
+
+            /*
+             * Part 1
+             * ใช้คะแนนจาก Advisor เท่านั้น
+             */
+            $advisorEvaluation = $evaluations
+                ->where('evaluator_role', 'advisor')
+                ->first();
+
+            $p1 = $advisorEvaluation
+                ? (float) ($advisorEvaluation->part1_score ?? 0)
+                : 0;
+
+            /*
+             * Part 2
+             * ค่าเฉลี่ยจากผู้ประเมินทั้งหมด
+             */
+            $p2avg = $evaluations->count()
+                ? round($evaluations->avg('part2_score'), 2)
+                : 0;
+
+            /*
+             * Part 3
+             * ค่าเฉลี่ยแต่ละหัวข้อ
+             */
+            $p3a = $evaluations->count()
+                ? round($evaluations->avg('part3a_score'), 2)
+                : 0;
+
+            $p3b = $evaluations->count()
+                ? round($evaluations->avg('part3b_score'), 2)
+                : 0;
+
+            $p3c = $evaluations->count()
+                ? round($evaluations->avg('part3c_score'), 2)
+                : 0;
+
+            /*
+             * Final Score
+             *
+             * ใช้สูตรเดียวกับหน้า scores.blade.php เดิม
+             */
+            $finalScore = $p1 + $p2avg + $p3a + $p3b + $p3c;
+
+            /*
+             * แปลงคะแนนเป็นเกรด
+             */
+            if ($finalScore >= 90) {
+                $grade = 'A';
+            } elseif ($finalScore >= 85) {
+                $grade = 'B+';
+            } elseif ($finalScore >= 80) {
+                $grade = 'B';
+            } elseif ($finalScore >= 70) {
+                $grade = 'C+';
+            } elseif ($finalScore >= 60) {
+                $grade = 'C';
+            } elseif ($finalScore >= 55) {
+                $grade = 'D+';
+            } elseif ($finalScore >= 50) {
+                $grade = 'D';
+            } else {
+                $grade = 'F';
+            }
+
+            /*
+             * บันทึกลง student.grade_cs303
+             */
+            $student->grade_cs303 = $grade;
+            $student->save();
+        }
+    });
+
+    return redirect()->back()
+        ->with('success', 'ยืนยันผลคะแนนและบันทึกเกรด CS303 เรียบร้อยแล้ว');
+}
 }

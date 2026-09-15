@@ -334,71 +334,172 @@ class StudentManagementController extends Controller
             return back()->with('error', 'ไม่พบข้อมูลนักศึกษาในไฟล์');
         }
 
-        $existingIds = DB::table('student')
-            ->whereIn('username_std', array_column($preview, 'username_std'))
-            ->pluck('username_std')
-            ->toArray();
+        $existingStudents = DB::table('student')
+    ->whereIn('username_std', array_column($preview, 'username_std'))
+    ->get()
+    ->keyBy('username_std');
 
-        foreach ($preview as &$item) {
-            $item['status'] = in_array($item['username_std'], $existingIds) ? 'exists' : 'new';
-        }
-        unset($item);
+foreach ($preview as &$item) {
 
-        $new    = count(array_filter($preview, fn($r) => $r['status'] === 'new'));
-        $exists = count(array_filter($preview, fn($r) => $r['status'] === 'exists'));
+    $grade = $item['grade_cs303'] ?? null;
 
-        session(['student_excel_preview' => $preview]);
-
-        return view('admin.students.import-excel', compact('preview', 'new', 'exists'));
+    // เกรดใน Excel ไม่ถูกต้อง
+    if (!$this->isValidCS303Grade($grade)) {
+        $item['status'] = 'invalid_grade';
+        continue;
     }
 
-    public function importExcelConfirm(Request $request)
-    {
-        if (!PermissionHelper::isAdmin()) {
-            return redirect()->route('menu')->with('error', 'คุณไม่มีสิทธิ์เข้าถึงหน้านี้');
+    $existing = $existingStudents->get($item['username_std']);
+
+    // นักศึกษาใหม่
+    if (!$existing) {
+        $item['status'] = 'new';
+        continue;
+    }
+
+    // มีนักศึกษาอยู่แล้ว
+    $dbGrade = $existing->grade_cs303;
+
+    // DB ยังไม่มีเกรด แต่ Excel มี
+    if (!$dbGrade && $grade) {
+        $item['status'] = 'grade_update';
+        continue;
+    }
+
+    // DB และ Excel มีเกรดเหมือนกัน
+    if ($dbGrade && $grade && $dbGrade === $grade) {
+        $item['status'] = 'grade_match';
+        continue;
+    }
+
+    // DB กับ Excel มีเกรดไม่ตรงกัน
+    if ($dbGrade && $grade && $dbGrade !== $grade) {
+        $item['status'] = 'grade_conflict';
+        $item['db_grade'] = $dbGrade;
+        continue;
+    }
+
+    $item['status'] = 'exists';
+}
+
+unset($item);
+
+        $new = count(array_filter(
+    $preview,
+    fn($r) => $r['status'] === 'new'
+));
+
+$exists = count(array_filter(
+    $preview,
+    fn($r) => $r['status'] === 'exists'
+));$exists = count(array_filter(
+    $preview,
+    fn($r) => in_array(
+        $r['status'],
+        ['exists', 'grade_match'],
+        true
+    )
+));
+
+$gradeUpdates = count(array_filter(
+    $preview,
+    fn($r) => $r['status'] === 'grade_update'
+));
+
+$gradeMatches = count(array_filter(
+    $preview,
+    fn($r) => $r['status'] === 'grade_match'
+));
+
+session(['student_excel_preview' => $preview]);
+
+return view(
+    'admin.students.import-excel',
+    compact(
+        'preview',
+        'new',
+        'exists',
+        'gradeUpdates',
+        'gradeMatches'
+    )
+);
+    }
+
+ public function importExcelConfirm(Request $request)
+{
+    $preview = session('student_excel_preview', []);
+
+    if (empty($preview)) {
+        return redirect()->route('students.importExcelForm')
+            ->with('error', 'ไม่พบข้อมูล preview กรุณาอัปโหลดใหม่');
+    }
+
+    $newRows = array_filter(
+        $preview,
+        fn($r) => $r['status'] === 'new'
+    );
+
+    $gradeUpdateRows = array_filter(
+        $preview,
+        fn($r) => $r['status'] === 'grade_update'
+    );
+
+    $created = 0;
+    $updated = 0;
+
+    DB::beginTransaction();
+
+    try {
+
+        foreach ($newRows as $item) {
+            DB::table('student')->insert([
+                'prefix_std'     => $item['prefix'],
+                'username_std'   => $item['username_std'],
+                'firstname_std'  => $item['firstname_std'],
+                'lastname_std'   => $item['lastname_std'],
+                'email_std'      => $item['email_std'],
+                'phone_std'      => $item['phone'],
+                'password_std'   => Hash::make($item['password']),
+                'role'           => 2048,
+                'course_code'    => $item['course_code'],
+                'student_type'   => $item['student_type'],
+                'semester'       => 2,
+                'year'           => 2568,
+                'grade_cs303'    => $item['grade_cs303'] ?? null,
+            ]);
+
+            $created++;
         }
 
-        $preview = session('student_excel_preview', []);
-        if (empty($preview)) {
-            return redirect()->route('students.importExcelForm')
-                ->with('error', 'ไม่พบข้อมูล preview กรุณาอัปโหลดใหม่');
-        }
-
-        $newRows = array_filter($preview, fn($r) => $r['status'] === 'new');
-
-        $created = 0;
-        DB::beginTransaction();
-        try {
-            foreach ($newRows as $item) {
-                DB::table('student')->insert([
-                    'prefix_std'    => $item['prefix'],
-                    'username_std'  => $item['username_std'],
-                    'firstname_std' => $item['firstname_std'],
-                    'lastname_std'  => $item['lastname_std'],
-                    'email_std'     => $item['email_std'],
-                    'phone_std'     => $item['phone'],
-                    'password_std'  => Hash::make($item['password']),
-                    'role'          => 2048,
-                    'course_code'   => $item['course_code'],
-                    'student_type'  => $item['student_type'],
-                    'semester'      => 2,
-                    'year'          => 2568,
+        foreach ($gradeUpdateRows as $item) {
+            DB::table('student')
+                ->where('username_std', $item['username_std'])
+                ->update([
+                    'grade_cs303' => $item['grade_cs303'],
                 ]);
-                $created++;
-            }
-            DB::commit();
-        } catch (\Exception $e) {
-            DB::rollBack();
-            return back()->with('error', 'เกิดข้อผิดพลาด: ' . $e->getMessage());
+
+            $updated++;
         }
 
-        session()->forget('student_excel_preview');
+        DB::commit();
 
-        $skipped = count($preview) - $created;
-        return redirect()->route('users.index')
-            ->with('success', "นำเข้านักศึกษาสำเร็จ {$created} คน"
-                . ($skipped ? " (ข้ามที่มีอยู่แล้ว {$skipped} คน)" : ''));
+    } catch (\Exception $e) {
+        DB::rollBack();
+
+        return back()->with(
+            'error',
+            'เกิดข้อผิดพลาด: ' . $e->getMessage()
+        );
     }
+
+    session()->forget('student_excel_preview');
+
+    return redirect()->route('users.index')
+        ->with(
+            'success',
+            "นำเข้าสำเร็จ: เพิ่มนักศึกษา {$created} คน, อัปเดตเกรด {$updated} คน"
+        );
+}
 
     private function mapExcelStudentRow(array $row, string $courseCode): array
     {
@@ -412,7 +513,11 @@ class StudentManagementController extends Controller
         $studentType    = str_contains($courseTypeText, 'พิเศษ') ? 's' : 'r';
         $password       = trim($row[4] ?? ''); // เบอร์โทร = password เริ่มต้น
         if ($password === '') $password = $username;
+        $grade = strtoupper(trim($row[6] ?? ''));
 
+        if ($grade === '') {
+         $grade = null;
+}
         return [
             'prefix'           => trim($row[0] ?? ''),
             'firstname_std'    => $parts[0] ?? $fullname,
@@ -424,10 +529,22 @@ class StudentManagementController extends Controller
             'course_code'      => $courseCode,
             'student_type'     => $studentType,
             'course_type_text' => $courseTypeText,
+            'grade_cs303'      => $grade, 
             'status'           => 'new',
         ];
     }
+    private function isValidCS303Grade(?string $grade): bool
+{
+    if ($grade === null) {
+        return true;
+    }
 
+    return in_array(
+        $grade,
+        ['A', 'B+', 'B', 'C+', 'C', 'D+', 'D', 'F'],
+        true
+    );
+}
     /**
      * Export all students to Excel
      */

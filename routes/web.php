@@ -182,6 +182,7 @@ Route::middleware('session.timeout')->group(function () {
             Route::get('export-preview', [CoordinatorController::class, 'exportPreview'])->name('export-preview');
             Route::get('export-data', [CoordinatorController::class, 'exportData'])->name('export-data');
             Route::get('{project}/scores', [CoordinatorController::class, 'viewScores'])->name('scores');
+            Route::post('{project}/scores/finalize', [CoordinatorController::class, 'finalizeGrades']) ->name('scores.finalize');
         });
         
         // Submissions Management
