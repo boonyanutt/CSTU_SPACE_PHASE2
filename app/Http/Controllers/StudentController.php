@@ -16,7 +16,14 @@ class StudentController extends Controller
         }
 
         // ดึงข้อมูลกลุ่มของ student พร้อม proposal ล่าสุด
-        $myGroup = $student->groups()->with(['members.student', 'latestProposal.lecturer', 'project'])->first();
+        $myGroup = $student->groups()
+    ->with([
+        'members.student',
+        'latestProposal.lecturer',
+        'project.advisorLecturer.user',
+        'project.committeeLecturers.user'
+    ])
+    ->first();
         
         // ดึงคำเชิญที่ค้างอยู่
         $pendingInvitations = $student->pendingInvitations()

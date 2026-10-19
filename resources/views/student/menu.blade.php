@@ -433,6 +433,26 @@
                 margin-bottom: 1rem;
             }
         }
+        
+
+            .project-details {
+                border: 1px solid rgba(255,255,255,.55);
+                border-radius: 12px;
+                overflow: hidden;
+            }
+
+            .project-details summary {
+                padding: 15px;
+                color: white;
+                cursor: pointer;
+                font-weight: 600;
+            }
+
+            .project-details-content {
+                background: white;
+                color: #333;
+                padding: 20px;
+            }
     </style>
 </head>
 <body>
@@ -466,41 +486,6 @@
                 <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
             </div>
         @endif
-
-        {{-- ผลการเรียน CS303 --}}
-        <div class="row mb-4">
-            <div class="col-12">
-                <div class="dashboard-card p-4">
-
-                    <h4 class="fw-bold mb-3">
-                        <i class="bi bi-mortarboard-fill me-2"></i>
-                        ผลการเรียน CS303
-                    </h4>
-
-                    <p class="mb-3">
-                        <strong>เกรด:</strong>
-                        {{ $student->grade_cs303 ?? 'ยังไม่มีเกรด' }}
-                    </p>
-
-                    @if($student->hasPassedCS303())
-
-                        <div class="alert alert-success mb-0">
-                            <i class="bi bi-check-circle-fill me-2"></i>
-                            คุณผ่านวิชา CS303 และมีสิทธิ์ดำเนินโครงงานต่อใน CS403
-                        </div>
-
-                    @else
-
-                        <div class="alert alert-danger mb-0">
-                            <i class="bi bi-x-circle-fill me-2"></i>
-                            คุณยังไม่ผ่านเงื่อนไข CS303
-                        </div>
-
-                    @endif
-
-                </div>
-            </div>
-        </div>
 
         @if(session('error'))
             <div class="alert alert-danger alert-dismissible fade show" role="alert">
@@ -648,107 +633,169 @@
         @endif
 
         <!-- My Group Status -->
-        <div class="row mb-4">
+        <div class="row mb-4" id="my-group">
             <div class="col-12">
                 @if($myGroup)
-                <div class="dashboard-card group-card p-4">
-                    <div class="d-flex justify-content-between align-items-start mb-4">
-                        <h4 class="fw-bold mb-0">
-                            <i class="bi bi-people-fill me-2"></i>กลุ่มของฉัน
-                        </h4>
-                        <span class="badge bg-primary" style="font-size: 1.2rem; padding: 0.75rem 1.5rem;">
-                            <i class="bi bi-hash me-1"></i>กลุ่มที่ {{ $myGroup->group_id }}
-                        </span>
-                    </div>
-                    <div class="row">
-                        <div class="col-md-8">
-                            <h5 class="mb-3">
-                                @if($myGroup->project)
-                                    {{ $myGroup->project->project_name }}
-                                @else
-                                    กลุ่มที่ {{ $myGroup->group_id }} - {{ $myGroup->subject_code }}
-                                @endif
-                            </h5>
-                            <div class="mb-2">
-                                <i class="bi bi-code-square me-2"></i>
-                                <strong>รหัสโครงงาน:</strong> {{ $myGroup->project->project_code ?? '-' }}
-                            </div>
-                            <div class="mb-2">
-                                <i class="bi bi-book me-2"></i>
-                                <strong>วิชา:</strong> {{ $myGroup->subject_code }}
-                            </div>
-                            <div class="mb-3">
-                                <i class="bi bi-calendar3 me-2"></i>
-                                <strong>ปีการศึกษา:</strong> {{ $myGroup->year }}/{{ $myGroup->semester }}
-                            </div>
-                            <div class="mb-3">
-                                <i class="bi bi-file-text me-2"></i>
-                                <strong>คำอธิบาย:</strong> {{ $myGroup->description ?: '-' }}
-                            </div>
-                            
-                            <h6 class="mt-4 mb-3">
-                                <i class="bi bi-person-badge me-2"></i>
-                                สมาชิกกลุ่ม ({{ $myGroup->members->count() }}/2)
-                            </h6>
-                            <ul class="list-unstyled">
-                                @foreach($myGroup->members as $member)
-                                <li class="mb-2">
-                                    <i class="bi bi-check-circle-fill me-2"></i>
-                                    {{ $member->student->full_name }} ({{ $member->student->username_std }})
-                                </li>
-                                @endforeach
-                            </ul>
-                            @php
-                                $currentMember = $myGroup->members
-                                    ->firstWhere('username_std', $student->username_std);
+                    @php
+                        $currentMember = $myGroup->members->firstWhere('username_std', $student->username_std);
+                        $topic2Status = $currentMember ? $currentMember->topic2_confirmation_status : 'pending';
+                    @endphp
+                    <div class="dashboard-card group-card p-4">
+                        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
+                            <h4 class="fw-bold mb-0"><i class="bi bi-people-fill me-2"></i>กลุ่มของฉัน</h4>
+                            <span class="badge bg-primary fs-6">กลุ่มที่ {{ $myGroup->group_id }}</span>
+                        </div>
+                        <h5 class="fw-bold mb-3">{{ $myGroup->project->project_name ?? ('กลุ่มที่ ' . $myGroup->group_id) }}</h5>
+                        <p class="mb-2"><i class="bi bi-code-square me-2"></i><strong>รหัสโครงงาน:</strong> {{ $myGroup->project->project_code ?? '-' }}</p>
+                        <p class="mb-2"><i class="bi bi-book me-2"></i><strong>วิชา:</strong> {{ $myGroup->subject_code }}</p>
+                        <p class="mb-2"><i class="bi bi-calendar3 me-2"></i><strong>ปีการศึกษา:</strong> {{ $myGroup->year }}/{{ $myGroup->semester }}</p>
+                        <p class="mb-2"><i class="bi bi-people me-2"></i><strong>สมาชิกกลุ่ม ({{ $myGroup->members->count() }}/2)</strong></p>
+                        <ul class="list-unstyled mb-3 ms-2">
+                            @foreach($myGroup->members as $member)
+                                <li class="mb-1"><i class="bi bi-person-circle me-2"></i>{{ $member->student->full_name ?? $member->username_std }} ({{ $member->username_std }})</li>
+                            @endforeach
+                        </ul>
+                        <div class="mb-3">
+                            <strong>สถานะการยืนยัน:</strong>
+                            @if($topic2Status === 'confirmed')
+                                <span class="badge bg-success">ยืนยันทำต่อแล้ว</span>
+                            @elseif($topic2Status === 'rejected')
+                                <span class="badge bg-danger">ไม่ดำเนินโครงงานต่อ</span>
+                            @else
+                                <span class="badge bg-warning text-dark">รอการยืนยัน</span>
+                            @endif
+                        </div>
 
-                                $topic2Status = $currentMember
-                                    ? $currentMember->topic2_confirmation_status
-                                    : 'pending';
-                            @endphp
+                        @if($topic2Status === 'pending')
+                            @if($student->hasPassedCS303())
+                                <form method="POST" action="{{ route('groups.topic2.confirm', $myGroup) }}" class="mb-3">
+                                    @csrf
+                                    <button type="submit" class="btn btn-success"><i class="bi bi-check-circle me-2"></i>ยืนยันทำโปรเจกต์ต่อ</button>
+                                </form>
+                            @else
+                                <div class="alert alert-danger mb-3">ไม่สามารถยืนยันทำโปรเจกต์ต่อได้ เนื่องจากเกรด CS303 ต่ำกว่า C หรือยังไม่มีเกรด</div>
+                            @endif
+                        @endif
 
-                            <div class="mt-3">
-                                <strong>สถานะ:</strong>
+                        <details class="project-details">
+                        <summary>
+                            <i class="bi bi-chevron-down me-2"></i>
+                            ดูรายละเอียดโครงงานเพิ่มเติม
+                        </summary>
 
-                                @if($topic2Status == 'pending')
-                                    <span class="badge bg-warning text-dark">
-                                        รอการยืนยัน
-                                    </span>
+                        <div class="project-details-content">
+                            <div class="row g-4">
 
-                                @elseif($topic2Status == 'confirmed')
-                                    <span class="badge bg-success">
-                                        ยืนยันทำต่อแล้ว
-                                    </span>
+                                {{-- รหัสโครงงาน --}}
+                                <div class="col-md-6">
+                                    <strong>รหัสโครงงาน</strong>
+                                    <p>{{ $myGroup->project->project_code ?? '-' }}</p>
+                                </div>
 
-                                @elseif($topic2Status == 'rejected')
-                                    <span class="badge bg-danger">
-                                        ไม่ดำเนินโครงงานต่อ
-                                    </span>
-                                @endif
+                                {{-- ชื่อโครงงาน --}}
+                                <div class="col-md-6">
+                                    <strong>ชื่อโครงงาน</strong>
+                                    <p>{{ $myGroup->project->project_name ?? '-' }}</p>
+                                </div>
+
+                                {{-- อาจารย์ที่ปรึกษา --}}
+                                <div class="col-md-6">
+                                    <strong>อาจารย์ที่ปรึกษา</strong>
+                                    <p>{{ $myGroup->project->advisor_name ?? '-' }}</p>
+                                </div>
+
+                                {{-- กรรมการคนที่ 1 --}}
+                                <div class="col-md-6">
+                                    <strong>กรรมการคนที่ 1</strong>
+                                    <p>{{ $myGroup->project->committee1_name ?? '-' }}</p>
+                                </div>
+
+                                {{-- กรรมการคนที่ 2 --}}
+                                <div class="col-md-6">
+                                    <strong>กรรมการคนที่ 2</strong>
+                                    <p>{{ $myGroup->project->committee2_name ?? '-' }}</p>
+                                </div>
+
+                                {{-- กรรมการคนที่ 3 --}}
+                                <div class="col-md-6">
+                                    <strong>กรรมการคนที่ 3</strong>
+                                    <p>{{ $myGroup->project->committee3_name ?? '-' }}</p>
+                                </div>
+
+                                {{-- วันเวลาสอบ --}}
+                                <div class="col-md-6">
+                                    <strong>วันเวลาสอบ</strong>
+                                    <p>{{ $myGroup->project->exam_datetime ?? '-' }}</p>
+                                </div>
+
+                                {{-- ประเภทนักศึกษา --}}
+                                <div class="col-md-6">
+                                    <strong>ประเภทนักศึกษา</strong>
+                                    <p>{{ $myGroup->project->student_type ?? '-' }}</p>
+                                </div>
+
+                                {{-- ประเภทโครงงาน --}}
+                                <div class="col-md-6">
+                                    <strong>ประเภทโครงงาน</strong>
+                                    <p>{{ $myGroup->project->project_type ?? '-' }}</p>
+                                </div>
+
+                                {{-- สถานะโครงงาน --}}
+                                <div class="col-md-6">
+                                    <strong>สถานะโครงงาน</strong>
+                                    <p>
+                                        <span class="badge bg-info">
+                                            {{ $myGroup->project->status_project ?? '-' }}
+                                        </span>
+                                    </p>
+                                </div>
+
                             </div>
                         </div>
-                        <div class="col-md-4 text-end">
-                            <div class="d-flex flex-column gap-3">
-                                <a href="{{ route('groups.show', $myGroup) }}" class="btn btn-light">
-                                    <i class="bi bi-eye-fill me-2"></i>ดูรายละเอียด
-                                </a>
-                                <button type="button" class="btn btn-danger" onclick="confirmLeaveGroup()">
-                                    <i class="bi bi-box-arrow-left me-2"></i>ออกจากกลุ่ม
-                                </button>
-                            </div>
-                        </div>
+                    </details>
                     </div>
-                </div>
                 @else
-                <div class="dashboard-card no-group-card">
-                    <i class="bi bi-people fa-4x"></i>
-                    <h4>คุณยังไม่มีกลุ่มโครงงาน</h4>
-                    <p>สร้างกลุ่มใหม่และเชิญเพื่อนร่วมงาน หรือรอคำเชิญจากเพื่อน</p>
-                    <a href="{{ route('groups.create') }}" class="btn" style="background: white; color: #0066CC; border: 2px solid #0066CC; padding: 1rem 3rem; border-radius: 50px; font-weight: 600; font-size: 1.1rem; box-shadow: 0 8px 20px rgba(0, 102, 204, 0.3); transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);">
-                        <i class="bi bi-plus-circle-fill me-2"></i>สร้างกลุ่มโครงงาน
-                    </a>
-                </div>
+                    <div class="dashboard-card no-group-card">
+                        <i class="bi bi-people fs-1"></i>
+                        <h4>ยังไม่มีกลุ่มโครงงาน</h4>
+                        <p>คุณสามารถสร้างกลุ่มหรือรอคำเชิญเข้าร่วมกลุ่มได้จากเมนูด้านล่าง</p>
+                    </div>
                 @endif
+            </div>
+        </div>
+
+        {{-- ผลการเรียน CS303 --}}
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="dashboard-card p-4">
+
+                    <h4 class="fw-bold mb-3">
+                        <i class="bi bi-mortarboard-fill me-2"></i>
+                        ผลการเรียน CS303
+                    </h4>
+
+                    <p class="mb-3">
+                        <strong>เกรด:</strong>
+                        {{ $student->grade_cs303 ?? 'ยังไม่มีเกรด' }}
+                    </p>
+
+                    @if($student->hasPassedCS303())
+
+                        <div class="alert alert-success mb-0">
+                            <i class="bi bi-check-circle-fill me-2"></i>
+                            คุณผ่านวิชา CS303 และมีสิทธิ์ดำเนินโครงงานต่อใน CS403
+                        </div>
+
+                    @else
+
+                        <div class="alert alert-danger mb-0">
+                            <i class="bi bi-x-circle-fill me-2"></i>
+                            คุณยังไม่ผ่านเงื่อนไข CS303
+                        </div>
+
+                    @endif
+
+                </div>
             </div>
         </div>
 
@@ -772,8 +819,8 @@
                     <div class="card-content">
                         <h5 class="card-title">จัดการกลุ่ม</h5>
                         <p class="card-description">ดูข้อมูลและจัดการกลุ่มของคุณ</p>
-                        <a href="{{ route('groups.show', $myGroup) }}" class="btn btn-primary mt-2">
-                            <span>เข้าสู่กลุ่ม</span>
+                        <a href="#my-group" class="btn btn-primary mt-2">
+                            <span>กลับไปกลุ่มของฉัน</span>
                             <i class="bi bi-arrow-right ms-2"></i>
                         </a>
                     </div>
@@ -833,10 +880,6 @@
                             <span class="badge bg-secondary">รอสมาชิกตอบรับคำเชิญ</span><br>
                             <small class="text-muted mt-2 d-block">รอให้สมาชิกตอบรับหรือปฏิเสธก่อนเสนอหัวข้อ</small>
                         </p>
-                        <a href="{{ route('groups.show', $myGroup->group_id) }}" class="btn btn-secondary mt-2">
-                            <span>ดูรายละเอียด</span>
-                            <i class="bi bi-arrow-right ms-2"></i>
-                        </a>
                     </div>
                 </div>
             </div>
@@ -863,8 +906,8 @@
                                         <span class="badge bg-warning text-dark">รอการพิจารณา</span><br>
                                         <small class="text-muted mt-2 d-block">{{ Str::limit($latestProposal->proposed_title, 35) }}</small>
                                     </p>
-                                    <a href="{{ route('groups.show', $myGroup->group_id) }}" class="btn btn-warning mt-2">
-                                        <span>ดูรายละเอียด</span>
+                                    <a href="#my-group" class="btn btn-warning mt-2">
+                                        <span>ดูข้อมูลกลุ่ม</span>
                                         <i class="bi bi-arrow-right ms-2"></i>
                                     </a>
                                 @elseif($latestProposal->status === 'rejected')
@@ -905,9 +948,9 @@
                             <span class="badge bg-success">อนุมัติแล้ว</span><br>
                             <small class="text-muted mt-2 d-block">{{ Str::limit($myGroup->project->project_name, 35) }}</small>
                         </p>
-                        <a href="{{ route('groups.show', $myGroup->group_id) }}" class="btn btn-success mt-2">
-                            <span>ดูรายละเอียด</span>
-                            <i class="bi bi-arrow-right ms-2"></i>
+                        <a href="#my-group" class="btn btn-success mt-2">
+                            <span>ดูข้อมูลในกลุ่มของฉัน</span>
+                            <i class="bi bi-arrow-up ms-2"></i>
                         </a>
                     </div>
                 </div>
