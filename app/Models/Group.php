@@ -92,7 +92,7 @@ class Group extends Model
     // Relationship กับ Project
     public function project()
     {
-        return $this->hasOne(Project::class, 'group_id', 'group_id');
+    return $this->belongsTo(Project::class, 'project_id', 'project_id');
     }
 
     // Relationship กับ Project Proposals

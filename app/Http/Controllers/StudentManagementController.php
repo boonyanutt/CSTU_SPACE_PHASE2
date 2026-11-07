@@ -156,12 +156,12 @@ class StudentManagementController extends Controller
 
         $file = $request->file('csv_file');
         $path = $file->getRealPath();
-        
+
         $csv = array_map('str_getcsv', file($path));
-        
+
         // ตรวจสอบ header
         $header = array_shift($csv);
-        
+
         $imported = 0;
         $skipped = 0;
         $errors = [];
@@ -205,7 +205,7 @@ class StudentManagementController extends Controller
 
             // ตรวจสอบว่า username ซ้ำหรือไม่
             $exists = DB::table('student')->where('username_std', $username)->exists();
-            
+
             if ($exists) {
                 $errors[] = "แถวที่ " . ($index + 2) . ": Username '{$username}' มีอยู่แล้ว";
                 $skipped++;
@@ -257,21 +257,21 @@ class StudentManagementController extends Controller
 
         $callback = function() {
             $file = fopen('php://output', 'w');
-            
+
             // Header
             fputcsv($file, ['username', 'firstname', 'lastname', 'email', 'password', 'course_code', 'semester', 'year']);
-            
+
             // ตัวอย่างข้อมูล
             fputcsv($file, ['6509650099', 'ทดสอบ', 'ระบบ', 'test.std@dome.tu.ac.th', 'testpass123', 'CS303', '2', '2568']);
             fputcsv($file, ['6509650098', 'ตัวอย่าง', 'นักศึกษา', 'example.std@dome.tu.ac.th', 'examplepass456', 'CS403', '1', '2568']);
             fputcsv($file, ['6509650097', 'สมมติ', 'ข้อมูล', 'sample.std@dome.tu.ac.th', 'samplepass789', 'CS303', '2', '2568']);
-            
+
             fclose($file);
         };
 
         return response()->stream($callback, 200, $headers);
     }
-    
+
     // ──────────────────────────────────────────────────────────────
     // Import Students จาก Excel ต้นฉบับ (68-2_Projects format)
     // Admin only
@@ -292,19 +292,33 @@ class StudentManagementController extends Controller
             return redirect()->route('menu')->with('error', 'คุณไม่มีสิทธิ์เข้าถึงหน้านี้');
         }
 
-        $request->validate([
-            'file' => 'required|file|mimes:xlsx,xls|max:20480',
+            $request->validate([
+             'file' => 'required|file|mimes:xlsx|max:20480',
+            'import_year' => 'required|integer|between:2500,2700',
+            'import_semester' => 'required|integer|in:1,2',
         ], [
             'file.required' => 'กรุณาเลือกไฟล์',
             'file.mimes'    => 'รองรับเฉพาะ .xlsx / .xls',
             'file.max'      => 'ขนาดไฟล์ต้องไม่เกิน 20 MB',
         ]);
+        $importYear = (int) $request->input('import_year');
+        $importSemester = (int) $request->input('import_semester');
+
+        session([
+         'student_excel_import_year' => $importYear,
+        'student_excel_import_semester' => $importSemester,
+        ]);
 
         try {
             $sheetNames = XlsxParser::sheetNames($request->file('file'));
-        } catch (\Exception $e) {
-            return back()->with('error', 'อ่านไฟล์ไม่ได้: ' . $e->getMessage());
-        }
+        } catch (\Throwable $e) {
+        return back()->with(
+        'error',
+        'อ่านไฟล์ไม่ได้: ' . $e->getMessage()
+        . ' | ไฟล์: ' . basename($e->getFile())
+        . ' | บรรทัด: ' . $e->getLine()
+    );
+}
 
         $studentSheets = array_filter($sheetNames, fn($n) => str_contains($n, '--Students'));
         if (empty($studentSheets)) {
@@ -317,17 +331,27 @@ class StudentManagementController extends Controller
             preg_match('/\b(CS\d+)\b/i', $sName, $m);
             $courseCode = $m[1] ?? 'CS303';
 
-            try {
-                $rows = XlsxParser::parseSheet($request->file('file'), $sName, 0);
-            } catch (\Exception $e) {
-                continue;
-            }
+           try {
+                 $rows = XlsxParser::parseSheet($request->file('file'), $sName, 0);
+            } catch (\Throwable $e) {
+    return back()->with(
+        'error',
+        'อ่านชีต ' . $sName . ' ไม่สำเร็จ: '
+        . $e->getMessage()
+        . ' | ไฟล์: ' . basename($e->getFile())
+        . ' | บรรทัด: ' . $e->getLine()
+    );
+}
 
-            foreach ($rows as $row) {
-                $studentId = trim($row[2] ?? '');
-                if ($studentId === '') continue;
-                $preview[] = $this->mapExcelStudentRow($row, $courseCode);
-            }
+if (!is_iterable($rows)) {
+    return back()->with('error', 'อ่านชีต ' . $sName . ' ไม่สำเร็จ: ตัวอ่าน Excel ไม่ส่งข้อมูลแถวกลับมา');
+}
+
+foreach ($rows as $row) {
+    $studentId = trim($row[2] ?? '');
+    if ($studentId === '') continue;
+    $preview[] = $this->mapExcelStudentRow($row, $courseCode);
+}
         }
 
         if (empty($preview)) {
@@ -340,6 +364,61 @@ class StudentManagementController extends Controller
     ->keyBy('username_std');
 
 foreach ($preview as &$item) {
+        // ตรวจนักศึกษาที่มาจากชีต CS403
+    if ($item['course_code'] === 'CS403') {
+
+        $username = $item['username_std'];
+        $existing = $existingStudents->get($username);
+
+        // ยังไม่มีข้อมูลนักศึกษาในระบบ
+       if (!$existing) {
+    // ไม่อนุญาตให้ลง CS403 หากยังไม่มีข้อมูล CS303 เดิม
+    $item['status'] = 'cs403_not_eligible';
+    $item['db_grade'] = null;
+    continue;
+}
+        // ตรวจว่านักศึกษาอยู่ในกลุ่ม CS403 แล้วหรือยัง
+$hasCS403Group = DB::table('group_members')
+    ->join('groups', 'group_members.group_id', '=', 'groups.group_id')
+    ->where('group_members.username_std', $username)
+    ->where('groups.subject_code', 'CS403')
+    ->exists();
+
+// ถ้าเคยมีกลุ่ม CS403 แล้ว ไม่ให้เปลี่ยนผ่านซ้ำ
+if ($hasCS403Group) {
+    $item['status'] = 'cs403_already_enrolled';
+    continue;
+}
+        // ใช้เกรด CS303 จากฐานข้อมูล ไม่ใช่จากชีต CS403
+        $dbGrade = strtoupper(trim($existing->grade_cs303 ?? ''));
+        $item['db_grade'] = $dbGrade !== '' ? $dbGrade : null;
+
+        $passingGrades = ['A', 'B+', 'B', 'C+', 'C'];
+
+        if (!in_array($dbGrade, $passingGrades, true)) {
+            $item['status'] = 'cs403_not_eligible';
+            continue;
+        }
+
+        // ค้นหากลุ่ม CS303 เดิม
+        $oldGroup = DB::table('group_members')
+            ->join('groups', 'group_members.group_id', '=', 'groups.group_id')
+            ->where('group_members.username_std', $username)
+            ->where('groups.subject_code', 'CS303')
+            ->select('groups.group_id')
+            ->first();
+
+        if (!$oldGroup) {
+            $item['status'] = 'cs403_no_old_group';
+            continue;
+        }
+
+        // เก็บเลขกลุ่ม CS303 เพื่อใช้ตอนสร้างรายการต่อเนื่อง
+        $item['old_group_id'] = $oldGroup->group_id;
+        $item['status'] = 'cs403_candidate';
+
+        continue;
+    }
 
     $grade = $item['grade_cs303'] ?? null;
 
@@ -383,6 +462,62 @@ foreach ($preview as &$item) {
 }
 
 unset($item);
+    // รายชื่อนักศึกษาที่ปรากฏในชีต CS403
+$cs403Usernames = array_column(
+    array_filter(
+        $preview,
+        fn($row) => $row['course_code'] === 'CS403'
+    ),
+    'username_std'
+);
+
+// ตรวจสมาชิกของกลุ่ม CS303 เดิมให้ครบ
+foreach ($preview as &$item) {
+
+    if ($item['status'] !== 'cs403_candidate') {
+        continue;
+    }
+
+    $oldGroupId = $item['old_group_id'];
+
+    $oldMembers = DB::table('group_members')
+        ->where('group_id', $oldGroupId)
+        ->pluck('username_std')
+        ->toArray();
+
+    // ตรวจว่าสมาชิกทุกคนอยู่ในชีต CS403 หรือไม่
+    $allMembersInCS403 = empty(
+        array_diff($oldMembers, $cs403Usernames)
+    );
+    // ดึงเกรด CS303 ของสมาชิกทุกคนจากฐานข้อมูล
+$memberGrades = DB::table('student')
+    ->whereIn('username_std', $oldMembers)
+    ->pluck('grade_cs303', 'username_std');
+
+// เกรดที่ผ่าน CS303
+$passingGrades = ['A', 'B+', 'B', 'C+', 'C'];
+
+// ต้องมีข้อมูลเกรดครบทุกคน
+$allMembersPassed = count($memberGrades) === count($oldMembers);
+
+foreach ($oldMembers as $memberUsername) {
+
+    $grade = strtoupper(trim($memberGrades[$memberUsername] ?? ''));
+
+    if (!in_array($grade, $passingGrades, true)) {
+        $allMembersPassed = false;
+        break;
+    }
+}
+
+    if ($allMembersInCS403 && $allMembersPassed) {
+        $item['status'] = 'cs403_ready';
+    } else {
+        $item['status'] = 'cs403_incomplete_group';
+    }
+}
+
+unset($item);
 
         $new = count(array_filter(
     $preview,
@@ -390,9 +525,6 @@ unset($item);
 ));
 
 $exists = count(array_filter(
-    $preview,
-    fn($r) => $r['status'] === 'exists'
-));$exists = count(array_filter(
     $preview,
     fn($r) => in_array(
         $r['status'],
@@ -411,24 +543,47 @@ $gradeMatches = count(array_filter(
     fn($r) => $r['status'] === 'grade_match'
 ));
 
+$cs403Ready = count(array_filter(
+    $preview,
+    fn($r) => $r['status'] === 'cs403_ready'
+));
+
 session(['student_excel_preview' => $preview]);
 
 return view(
     'admin.students.import-excel',
     compact(
-        'preview',
-        'new',
-        'exists',
-        'gradeUpdates',
-        'gradeMatches'
-    )
+    'preview',
+    'new',
+    'exists',
+    'gradeUpdates',
+    'gradeMatches',
+    'cs403Ready'
+)
 );
     }
 
  public function importExcelConfirm(Request $request)
 {
+   // อนุญาตเฉพาะผู้ดูแลระบบ
+    if (!PermissionHelper::isAdmin()) {
+        return redirect()->route('menu')
+            ->with('error', 'คุณไม่มีสิทธิ์เข้าถึงหน้านี้');
+    }
     $preview = session('student_excel_preview', []);
+    // อ่านปีการศึกษาและภาคเรียนที่เลือกจากหน้า Import
+    $importYear = session('student_excel_import_year');
+    $importSemester = session('student_excel_import_semester');
 
+    // ตรวจว่ามีข้อมูลปีและเทอมครบหรือไม่
+    if ($importYear === null || $importSemester === null) {
+    return redirect()->route('students.importExcelForm')
+        ->with('error', 'ไม่พบปีการศึกษาหรือภาคเรียน กรุณาอัปโหลดใหม่');
+}
+
+    // แปลงเป็นจำนวนเต็ม
+    $importYear = (int) $importYear;
+    $importSemester = (int) $importSemester;
     if (empty($preview)) {
         return redirect()->route('students.importExcelForm')
             ->with('error', 'ไม่พบข้อมูล preview กรุณาอัปโหลดใหม่');
@@ -443,7 +598,35 @@ return view(
         $preview,
         fn($r) => $r['status'] === 'grade_update'
     );
+    // นักศึกษาที่พร้อมเปลี่ยนผ่าน CS303 -> CS403
+$cs403ReadyRows = array_filter(
+    $preview,
+    fn($r) => $r['status'] === 'cs403_ready'
+);
 
+// รวมสมาชิกตามกลุ่ม CS303 เดิม
+$cs403Groups = [];
+
+foreach ($cs403ReadyRows as $item) {
+    $oldGroupId = $item['old_group_id'];
+
+    $cs403Groups[$oldGroupId][] = $item['username_std'];
+}
+
+// ค้นหารายวิชา CS403 ตามปีและเทอมที่เลือก Import
+$cs403Term = DB::table('subjects')
+    ->where('subject_code', 'CS403')
+    ->where('year', $importYear)
+    ->where('semester', $importSemester)
+    ->first();
+
+// ตรวจว่ามีรายวิชา CS403 ในปีและเทอมนี้หรือไม่
+if (!empty($cs403Groups) && !$cs403Term) {
+    return back()->with(
+        'error',
+        "ไม่พบรายวิชา CS403 ปี {$importYear} ภาคเรียน {$importSemester} ในระบบ"
+    );
+}
     $created = 0;
     $updated = 0;
 
@@ -452,7 +635,13 @@ return view(
     try {
 
         foreach ($newRows as $item) {
-            DB::table('student')->insert([
+            // ป้องกันการเพิ่มนักศึกษาใหม่เป็น CS403 โดยตรง
+        if ($item['course_code'] === 'CS403') {
+            throw new \Exception(
+        "นักศึกษา {$item['username_std']} ยังไม่มีประวัติ CS303 ในระบบ"
+    );
+}
+            $studentId = DB::table('student')->insertGetId([
                 'prefix_std'     => $item['prefix'],
                 'username_std'   => $item['username_std'],
                 'firstname_std'  => $item['firstname_std'],
@@ -463,24 +652,293 @@ return view(
                 'role'           => 2048,
                 'course_code'    => $item['course_code'],
                 'student_type'   => $item['student_type'],
-                'semester'       => 2,
-                'year'           => 2568,
+                'semester' => $importSemester,
+                'year' => $importYear,
                 'grade_cs303'    => $item['grade_cs303'] ?? null,
+                    ]);
+
+        // บันทึกประวัติการลงทะเบียนของนักศึกษาใหม่
+        DB::table('student_enrollments')->insert([
+        'student_id'   => $studentId,
+        'subject_code' => $item['course_code'],
+        'year'         => $importYear,
+        'semester'     => $importSemester,
+        'grade'        => $item['course_code'] === 'CS303'
+            ? ($item['grade_cs303'] ?? null)
+            : null,
+        'project_id'   => null,
+        'created_at'   => now(),
+        'updated_at'   => now(),
+        ]);
+
+        $created++;
+        }
+
+       foreach ($gradeUpdateRows as $item) {
+
+    // 1. ค้นหานักศึกษาเดิม
+    $student = DB::table('student')
+        ->where('username_std', $item['username_std'])
+        ->first();
+
+    if (!$student) {
+        throw new \Exception(
+            "ไม่พบนักศึกษา {$item['username_std']}"
+        );
+    }
+
+    // 2. บันทึกเกรดในตารางเดิม เพื่อให้ระบบ Phase 1 ยังใช้งานได้
+    DB::table('student')
+        ->where('student_id', $student->student_id)
+        ->update([
+            'grade_cs303' => $item['grade_cs303'],
+        ]);
+
+    // 3. บันทึกหรืออัปเดตประวัติของปีและเทอมที่ Import
+    DB::table('student_enrollments')->updateOrInsert(
+        [
+            'student_id' => $student->student_id,
+            'subject_code' => 'CS303',
+            'year' => $importYear,
+            'semester' => $importSemester,
+        ],
+        [
+            'grade' => $item['grade_cs303'],
+            'updated_at' => now(),
+        ]
+    );
+
+    $updated++;
+}
+
+        // เปลี่ยนผ่านกลุ่ม CS303 -> CS403
+$transitionedGroups = 0;
+
+$cs403Roster = array_values(array_unique(array_map(
+    'strval',
+    array_column(
+        array_filter(
+            $preview,
+            fn($row) => $row['course_code'] === 'CS403'
+        ),
+        'username_std'
+    )
+)));
+
+foreach ($cs403Groups as $oldGroupId => $previewMembers) {
+
+    // 1. ตรวจกลุ่ม CS303 เดิม
+    $oldGroup = DB::table('groups')
+        ->where('group_id', $oldGroupId)
+        ->where('subject_code', 'CS303')
+        ->lockForUpdate()
+        ->first();
+
+    if (!$oldGroup || $oldGroup->status_group !== 'approved') {
+        throw new \Exception("กลุ่ม {$oldGroupId} ยังไม่พร้อมเปลี่ยนผ่าน");
+    }
+
+    // 2. ตรวจโครงงานเดิม
+    $oldProject = DB::table('projects')
+        ->where('group_id', $oldGroupId)
+        ->lockForUpdate()
+        ->first();
+
+    if (!$oldProject) {
+        throw new \Exception("ไม่พบโครงงานของกลุ่ม {$oldGroupId}");
+    }
+
+   // 3. ตรวจว่ามีกลุ่ม CS403 ที่ใช้ Project เดิมแล้วหรือยัง
+$existingGroup = DB::table('groups')
+    ->where('project_id', $oldProject->project_id)
+    ->where('subject_code', 'CS403')
+    ->exists();
+
+if ($existingGroup) {
+    throw new \Exception(
+        "โครงงาน {$oldProject->project_id} มีกลุ่ม CS403 แล้ว"
+    );
+}
+
+    // 4. ตรวจสมาชิกเดิมทั้งหมด
+    $oldMembers = DB::table('group_members')
+        ->where('group_id', $oldGroupId)
+        ->pluck('username_std')
+        ->map(fn($username) => (string) $username)
+        ->toArray();
+
+    if (empty($oldMembers)) {
+        throw new \Exception("กลุ่ม {$oldGroupId} ไม่มีสมาชิก");
+    }
+
+    // ต้องมีรายชื่อสมาชิกทุกคนใน Excel CS403
+    if (!empty(array_diff($oldMembers, $cs403Roster))) {
+        throw new \Exception(
+            "รายชื่อสมาชิกกลุ่ม {$oldGroupId} ใน Excel CS403 ไม่ครบ"
+        );
+    }
+
+    // ตรวจว่ารายชื่อที่ Preview ระบุไว้ตรงกับสมาชิกจริง
+    if (
+        !empty(array_diff($oldMembers, $previewMembers)) ||
+        !empty(array_diff($previewMembers, $oldMembers))
+    ) {
+        throw new \Exception(
+            "ข้อมูลสมาชิกกลุ่ม {$oldGroupId} เปลี่ยนแปลง กรุณา Preview ใหม่"
+        );
+    }
+
+    // 5. ตรวจนักศึกษาและเกรดทุกคนจาก DB อีกครั้ง
+    $students = DB::table('student')
+        ->whereIn('username_std', $oldMembers)
+        ->lockForUpdate()
+        ->get()
+        ->keyBy('username_std');
+
+    if ($students->count() !== count($oldMembers)) {
+        throw new \Exception("ข้อมูลนักศึกษากลุ่ม {$oldGroupId} ไม่ครบ");
+    }
+
+    foreach ($oldMembers as $username) {
+
+        $student = $students->get($username);
+        $grade = strtoupper(trim($student->grade_cs303 ?? ''));
+
+        if (!in_array($grade, ['A', 'B+', 'B', 'C+', 'C'], true)) {
+            throw new \Exception(
+                "นักศึกษา {$username} ยังไม่ผ่าน CS303"
+            );
+        }
+
+        // ป้องกันนักศึกษาที่มีกลุ่ม CS403 อยู่แล้ว
+        $hasCS403Group = DB::table('group_members')
+            ->join('groups', 'group_members.group_id', '=', 'groups.group_id')
+            ->where('group_members.username_std', $username)
+            ->where('groups.subject_code', 'CS403')
+            ->exists();
+
+        if ($hasCS403Group) {
+            throw new \Exception(
+                "นักศึกษา {$username} มีกลุ่ม CS403 อยู่แล้ว"
+            );
+        }
+    }
+
+    // 6. สร้างกลุ่ม CS403 ใหม่
+    $newGroupId = DB::table('groups')->insertGetId([
+        'year' => $importYear,
+        'semester' => $importSemester,
+        'subject_code' => 'CS403',
+        'status_group' => 'approved',
+        'project_id' => $oldProject->project_id,
+        'created_at'   => now(),
+        'updated_at'   => now(),
+    ], 'group_id');
+
+    // 7. คัดลอกสมาชิกเดิม โดยรอให้แต่ละคนยืนยันการทำต่อ
+    foreach ($oldMembers as $username) {
+        DB::table('group_members')->insert([
+            'group_id'                  => $newGroupId,
+            'username_std'             => $username,
+            'topic2_confirmation_status' => 'pending',
+            'created_at'               => now(),
+            'updated_at'               => now(),
+        ]);
+    }
+        // บันทึกประวัติ CS403 โดยใช้ Project เดิม
+// บันทึกประวัติ CS403 โดยใช้ Project เดิม
+foreach ($oldMembers as $username) {
+
+    // ดึงข้อมูลนักศึกษาจากสมาชิกกลุ่มเดิม
+    $student = $students->get($username);
+
+    // ตรวจว่ามีประวัติรายวิชานี้ในปี/เทอมนี้หรือยัง
+    $enrollment = DB::table('student_enrollments')
+        ->where('student_id', $student->student_id)
+        ->where('subject_code', 'CS403')
+        ->where('year', $importYear)
+        ->where('semester', $importSemester)
+        ->first();
+
+    if ($enrollment) {
+
+        // มีประวัติแล้ว: อัปเดตเฉพาะ Project และเวลาแก้ไข
+        DB::table('student_enrollments')
+            ->where('enrollment_id', $enrollment->enrollment_id)
+            ->update([
+                'project_id' => $oldProject->project_id,
+                'updated_at' => now(),
             ]);
 
-            $created++;
-        }
+    } else {
 
-        foreach ($gradeUpdateRows as $item) {
-            DB::table('student')
-                ->where('username_std', $item['username_std'])
-                ->update([
-                    'grade_cs303' => $item['grade_cs303'],
-                ]);
+        // ยังไม่มีประวัติ: เพิ่มรายการใหม่
+        DB::table('student_enrollments')->insert([
+            'student_id'   => $student->student_id,
+            'subject_code' => 'CS403',
+            'year'         => $importYear,
+            'semester'     => $importSemester,
+            'grade'        => null,
+            'project_id'   => $oldProject->project_id,
+            'created_at'   => now(),
+            'updated_at'   => now(),
+        ]);
+    }
+}
 
-            $updated++;
-        }
+    // 8. สร้างโครงงาน CS403 ที่เชื่อมกับโครงงานเดิม
+   /*
+DB::table('projects')->insert([
+    'group_id'          => $newGroupId,
+    'project_name'      => $oldProject->project_name,
+    'project_code'      => 'CS403-CONT-' . $oldProject->project_id,
+    'student_type'      => $oldProject->student_type,
+    'status_project'    => 'in_progress',
+    'project_type'      => $oldProject->project_type,
+    'parent_project_id' => $oldProject->project_id,
+    'created_at'        => now(),
+    'updated_at'        => now(),
+]);
+*/
+// เก็บประวัติ CS303 เดิม ก่อนเปลี่ยนเป็น CS403
+foreach ($oldMembers as $username) {
 
+    $student = $students->get($username);
+
+    // ตรวจว่ามีประวัติ CS303 ในปีและภาคเรียนนี้แล้วหรือยัง
+    $existingEnrollment = DB::table('student_enrollments')
+        ->where('student_id', $student->student_id)
+        ->where('subject_code', 'CS303')
+        ->where('year', $oldGroup->year)
+        ->where('semester', $oldGroup->semester)
+        ->first();
+
+    // ถ้ายังไม่มีประวัติ จึงเพิ่มข้อมูลใหม่
+    if (!$existingEnrollment) {
+
+        DB::table('student_enrollments')->insert([
+            'student_id' => $student->student_id,
+            'subject_code' => 'CS303',
+            'year' => $oldGroup->year,
+            'semester' => $oldGroup->semester,
+            'grade' => $student->grade_cs303,
+            'project_id' => $oldProject->project_id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    }
+}
+    // 9. เปลี่ยนวิชาปัจจุบันของสมาชิกเป็น CS403
+    DB::table('student')
+    ->whereIn('username_std', $oldMembers)
+    ->update([
+        'course_code' => 'CS403',
+        'year' => $importYear,
+        'semester' => $importSemester,
+    ]);
+
+    $transitionedGroups++;
+}
         DB::commit();
 
     } catch (\Exception $e) {
@@ -513,7 +971,10 @@ return view(
         $studentType    = str_contains($courseTypeText, 'พิเศษ') ? 's' : 'r';
         $password       = trim($row[4] ?? ''); // เบอร์โทร = password เริ่มต้น
         if ($password === '') $password = $username;
-        $grade = strtoupper(trim($row[6] ?? ''));
+        // อ่านเกรดเฉพาะชีต CS303
+        $grade = $courseCode === 'CS303'
+         ? strtoupper(trim($row[6] ?? ''))
+    : '';
 
         if ($grade === '') {
          $grade = null;
@@ -529,7 +990,7 @@ return view(
             'course_code'      => $courseCode,
             'student_type'     => $studentType,
             'course_type_text' => $courseTypeText,
-            'grade_cs303'      => $grade, 
+            'grade_cs303'      => $grade,
             'status'           => 'new',
         ];
     }

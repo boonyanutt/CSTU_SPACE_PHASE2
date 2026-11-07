@@ -43,7 +43,7 @@ class XlsxParser
         $ssXml  = $zip->getFromName('xl/sharedStrings.xml');
         if ($ssXml) {
             $ss = simplexml_load_string($ssXml);
-            foreach ($ss->si as $si) {
+            foreach (($ss->xpath('//*[local-name()="si"]') ?: []) as $si) {
                 if (isset($si->t)) {
                     $shared[] = (string) $si->t;
                 } else {
@@ -71,103 +71,174 @@ class XlsxParser
     /**
      * List all sheet names in an XLSX file.
      */
-    public static function sheetNames($file): array
-    {
-        $path = is_string($file) ? $file : $file->getRealPath();
-        $zip  = new \ZipArchive();
-        if ($zip->open($path) !== true) return [];
+   public static function sheetNames($file): array
+{
+    $path = is_string($file) ? $file : $file->getRealPath();
 
-        $wbXml = $zip->getFromName('xl/workbook.xml');
-        $zip->close();
-        if (!$wbXml) return [];
+    $zip = new \ZipArchive();
 
-        $wb    = simplexml_load_string($wbXml);
-        $names = [];
-        foreach ($wb->sheets->sheet as $sheet) {
-            $names[] = (string) $sheet['name'];
-        }
-        return $names;
+    if ($zip->open($path) !== true) {
+        throw new \RuntimeException('ไม่สามารถเปิดไฟล์ XLSX ได้');
     }
+
+    $wbXml = $zip->getFromName('xl/workbook.xml');
+    $zip->close();
+
+    if (!$wbXml) {
+        throw new \RuntimeException('ไม่พบ workbook.xml');
+    }
+
+    $wb = simplexml_load_string($wbXml);
+
+    if ($wb === false) {
+        throw new \RuntimeException('อ่าน workbook.xml ไม่สำเร็จ');
+    }
+
+    $sheets = $wb->xpath('//*[local-name()="sheet"]');
+
+    if (empty($sheets)) {
+        throw new \RuntimeException('ไม่พบรายชื่อชีตใน Excel');
+    }
+
+    $names = [];
+
+    foreach ($sheets as $sheet) {
+        $names[] = (string) $sheet['name'];
+    }
+
+    return $names;
+}
+
 
     // ── private helpers ──────────────────────────────────────
 
-    private static function resolveSheetPath(\ZipArchive $zip, ?string $sheetName): string
-    {
-        // Read workbook.xml to get sheet list
-        $wbXml = $zip->getFromName('xl/workbook.xml');
-        if (!$wbXml) return 'xl/worksheets/sheet1.xml';
 
-        $wb = simplexml_load_string($wbXml);
+private static function resolveSheetPath(\ZipArchive $zip, ?string $sheetName): string
+{
+    $wbXml = $zip->getFromName('xl/workbook.xml');
 
-        // If no name given, use first sheet
-        if ($sheetName === null) {
-            $first = $wb->sheets->sheet[0] ?? null;
-            if (!$first) return 'xl/worksheets/sheet1.xml';
-            $rId = (string) $first->attributes('http://schemas.openxmlformats.org/officeDocument/2006/relationships')['id'];
-        } else {
-            $rId = null;
-            foreach ($wb->sheets->sheet as $sheet) {
-                if ((string) $sheet['name'] === $sheetName) {
-                    $rId = (string) $sheet->attributes('http://schemas.openxmlformats.org/officeDocument/2006/relationships')['id'];
-                    break;
-                }
-            }
-            if (!$rId) return 'xl/worksheets/sheet1.xml';
-        }
-
-        // Read workbook rels to map rId → target file
-        $relsXml = $zip->getFromName('xl/_rels/workbook.xml.rels');
-        if (!$relsXml) return 'xl/worksheets/sheet1.xml';
-
-        $rels = simplexml_load_string($relsXml);
-        foreach ($rels->Relationship as $rel) {
-            if ((string) $rel['Id'] === $rId) {
-                $target = ltrim((string) $rel['Target'], '/');
-                // Target may be absolute "/xl/…" (openpyxl) or relative "worksheets/…"
-                return strpos($target, 'xl/') === 0 ? $target : 'xl/' . $target;
-            }
-        }
-
-        return 'xl/worksheets/sheet1.xml';
+    if (!$wbXml) {
+        throw new \RuntimeException('ไม่พบ workbook.xml');
     }
 
-    private static function parseSheetXml(string $xml, array $shared, int $skipRows): array
-    {
-        $sheet = simplexml_load_string($xml);
-        $rows  = [];
+    $wb = simplexml_load_string($wbXml);
 
-        foreach ($sheet->sheetData->row as $row) {
-            $rowNum = (int) $row['r'];
-            if ($rowNum <= $skipRows) continue;
+    if ($wb === false) {
+        throw new \RuntimeException('อ่าน workbook.xml ไม่สำเร็จ');
+    }
 
-            $cells  = [];
-            $maxCol = 0;
+    $sheets = $wb->xpath('//*[local-name()="sheet"]') ?: [];
 
-            foreach ($row->c as $c) {
-                $ref  = (string) $c['r'];
-                $col  = self::colIndex($ref);
-                $type = (string) ($c['t'] ?? '');
-                $val  = isset($c->v) ? (string) $c->v : '';
+    $rId = null;
 
-                if ($type === 's') {
-                    $val = $shared[(int) $val] ?? '';
-                } elseif ($type === 'inlineStr') {
-                    $val = isset($c->is->t) ? (string) $c->is->t : '';
-                }
+    foreach ($sheets as $sheet) {
+        if ($sheetName === null || (string) $sheet['name'] === $sheetName) {
+            $attrs = $sheet->attributes(
+                'http://schemas.openxmlformats.org/officeDocument/2006/relationships'
+            );
 
-                $cells[$col] = $val;
-                if ($col > $maxCol) $maxCol = $col;
+            $rId = (string) $attrs['id'];
+            break;
+        }
+    }
+
+    if (!$rId) {
+        throw new \RuntimeException("ไม่พบชีต '{$sheetName}'");
+    }
+
+    $relsXml = $zip->getFromName('xl/_rels/workbook.xml.rels');
+
+    if (!$relsXml) {
+        throw new \RuntimeException('ไม่พบ workbook relationships');
+    }
+
+    $rels = simplexml_load_string($relsXml);
+
+    if ($rels === false) {
+        throw new \RuntimeException('อ่าน workbook relationships ไม่สำเร็จ');
+    }
+
+    $relationships = $rels->xpath('//*[local-name()="Relationship"]') ?: [];
+
+    foreach ($relationships as $rel) {
+        if ((string) $rel['Id'] === $rId) {
+            $target = (string) $rel['Target'];
+
+            if (str_starts_with($target, '/')) {
+                return ltrim($target, '/');
             }
 
-            $result = [];
-            for ($i = 0; $i <= max($maxCol, 10); $i++) {
-                $result[] = $cells[$i] ?? '';
-            }
-            $rows[] = $result;
+            return 'xl/' . ltrim($target, '/');
+        }
+    }
+
+    throw new \RuntimeException("ไม่พบ worksheet สำหรับชีต '{$sheetName}'");
+}
+
+
+private static function parseSheetXml(string $xml, array $shared, int $skipRows): array
+{
+    $sheet = simplexml_load_string($xml);
+
+    if ($sheet === false) {
+        throw new \RuntimeException('อ่าน worksheet XML ไม่สำเร็จ');
+    }
+
+    $rowNodes = $sheet->xpath('//*[local-name()="sheetData"]/*[local-name()="row"]');
+
+    if ($rowNodes === false) {
+        throw new \RuntimeException('อ่านแถวข้อมูล Excel ไม่สำเร็จ');
+    }
+
+    $rows = [];
+
+    foreach ($rowNodes as $row) {
+        $rowNum = (int) $row['r'];
+
+        if ($rowNum <= $skipRows) {
+            continue;
         }
 
-        return $rows;
+        $cells = [];
+        $maxCol = 0;
+
+        $cellNodes = $row->xpath('./*[local-name()="c"]') ?: [];
+
+foreach ($cellNodes as $c) {
+            $ref = (string) $c['r'];
+            $col = self::colIndex($ref);
+            $type = (string) $c['t'];
+
+            $values = $c->xpath('./*[local-name()="v"]');
+            $val = isset($values[0]) ? (string) $values[0] : '';
+
+            if ($type === 's') {
+                $val = $shared[(int) $val] ?? '';
+            } elseif ($type === 'inlineStr') {
+                $texts = $c->xpath('.//*[local-name()="t"]');
+                $val = '';
+
+               foreach (($texts ?: []) as $text) {
+                    $val .= (string) $text;
+                }
+            }
+
+            $cells[$col] = $val;
+            $maxCol = max($maxCol, $col);
+        }
+
+        $result = [];
+
+        for ($i = 0; $i <= max($maxCol, 10); $i++) {
+            $result[] = $cells[$i] ?? '';
+        }
+
+        $rows[] = $result;
     }
+
+    return $rows;
+}
+
 
     /**
      * Convert a cell reference like "AB6" to a 0-based column index.

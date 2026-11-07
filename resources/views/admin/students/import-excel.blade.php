@@ -132,6 +132,46 @@
                 <form method="POST" action="{{ route('students.importExcelPreview') }}"
                       enctype="multipart/form-data" id="uploadForm">
                     @csrf
+                    <!-- เลือกปีการศึกษา -->
+<div class="mb-3">
+    <label for="importYear" class="form-label fw-semibold">
+        ปีการศึกษา (พ.ศ.)
+    </label>
+
+    <input
+        type="number"
+        name="import_year"
+        id="importYear"
+        class="form-control"
+        min="2500"
+        max="2700"
+        value="{{ old('import_year') }}"
+        placeholder="เช่น 2568"
+        required
+    >
+</div>
+
+<!-- เลือกภาคเรียน -->
+<div class="mb-3">
+    <label for="importSemester" class="form-label fw-semibold">
+        ภาคเรียน
+    </label>
+
+    <select
+        name="import_semester"
+        id="importSemester"
+        class="form-select"
+        required
+    >
+        <option value="">-- เลือกภาคเรียน --</option>
+        <option value="1" {{ old('import_semester') == '1' ? 'selected' : '' }}>
+            ภาคเรียนที่ 1
+        </option>
+        <option value="2" {{ old('import_semester') == '2' ? 'selected' : '' }}>
+            ภาคเรียนที่ 2
+        </option>
+    </select>
+</div>
                     <div class="upload-zone" id="uploadZone"
                          onclick="document.getElementById('fileInput').click()">
                         <div class="upload-icon"><i class="bi bi-file-earmark-excel"></i></div>
@@ -158,19 +198,23 @@
                     <div class="stats-chip chip-total">รวม {{ count($preview) }} คน</div>
                     <div class="stats-chip chip-new">✓ ใหม่: {{ $new ?? 0 }} คน</div>
                     <div class="stats-chip chip-exist">⚠ มีอยู่แล้ว: {{ $exists ?? 0 }} คน</div>
+                    <div class="stats-chip chip-new"> ✓ พร้อมต่อ CS403: {{ $cs403Ready ?? 0 }} คน
+</div>
                 </div>
 
-               @if(($new ?? 0) > 0 || ($gradeUpdates ?? 0) > 0)
+               @if(($new ?? 0) > 0 || ($gradeUpdates ?? 0) > 0 || ($cs403Ready ?? 0) > 0)
                 <form method="POST" action="{{ route('students.importExcelConfirm') }}" id="confirmForm">
                     @csrf
                     <div class="d-flex justify-content-between align-items-center mb-3 gap-2 flex-wrap">
                         <div class="text-muted small">
                             <i class="bi bi-info-circle me-1"></i>
-                           กด <strong>ยืนยัน</strong>เพื่อเพิ่มนักศึกษาใหม่ {{ $new ?? 0 }} คนและอัปเดตเกรด CS303 {{ $gradeUpdates ?? 0 }} คน
+กด <strong>ยืนยัน</strong> เพื่อเพิ่มนักศึกษาใหม่ {{ $new ?? 0 }} คน
+อัปเดตเกรด CS303 {{ $gradeUpdates ?? 0 }} คน
+และเปลี่ยนผ่าน CS403 {{ $cs403Ready ?? 0 }} คน
                         </div>
                         <button type="submit" class="btn btn-success btn-sm fw-semibold px-4">
                             <i class="bi bi-person-plus-fill me-2"></i>ยืนยัน Import
-({{ ($new ?? 0) + ($gradeUpdates ?? 0) }} คน)
+({{ ($new ?? 0) + ($gradeUpdates ?? 0) + ($cs403Ready ?? 0) }} คน)
                         </button>
                     </div>
                 </form>
@@ -208,14 +252,54 @@
                              'grade_match'    => 'row-match',
                              'grade_conflict' => 'row-conflict',
                              'invalid_grade'  => 'row-invalid',
+                             'cs403_ready' => 'row-new',
+                             'cs403_already_enrolled' => 'row-exists',
+                            'cs403_incomplete_group'  => 'row-conflict',
+                            'cs403_not_eligible'      => 'row-invalid',
+                            'cs403_no_old_group' => 'row-invalid',
                              default          => 'row-exists',
+
                          };
                         @endphp
 
 <tr class="{{ $rowClass }}">
                                 <td class="text-center text-muted">{{ $i + 1 }}</td>
                                 <td>
-     @if($item['status'] === 'new')
+
+    @if($item['status'] === 'cs403_already_enrolled')
+
+    <span class="status-pill pill-match">
+        ✓ ลงทะเบียน CS403 แล้ว
+    </span>
+
+@elseif($item['status'] === 'cs403_ready')
+    <span class="status-pill pill-new">
+        ✓ พร้อมต่อ CS403
+    </span>
+    <div class="small text-muted mt-1">
+        กลุ่ม CS303 เดิม: {{ $item['old_group_id'] ?? '-' }}
+    </div>
+
+@elseif($item['status'] === 'cs403_incomplete_group')
+
+    <span class="status-pill pill-conflict">
+        ⚠ สมาชิกไม่ครบ
+    </span>
+
+@elseif($item['status'] === 'cs403_not_eligible')
+
+    <span class="status-pill pill-invalid">
+        ✗ ยังไม่ผ่าน CS303
+    </span>
+
+@elseif($item['status'] === 'cs403_no_old_group')
+
+    <span class="status-pill pill-invalid">
+        ✗ ไม่พบกลุ่ม CS303
+    </span>
+
+@elseif($item['status'] === 'new')
+
 
     <span class="status-pill pill-new">
         ✓ ใหม่
@@ -241,7 +325,9 @@
 
     <div class="small text-danger mt-1">
         DB: {{ $item['db_grade'] ?? '-' }}
-        / Excel: {{ $item['grade_cs303'] ?? '-' }}
+        / Excel: {{ $item['course_code'] === 'CS403'
+    ? ($item['db_grade'] ?? '-')
+    : ($item['grade_cs303'] ?? '-') }}
     </div>
 
 @elseif($item['status'] === 'invalid_grade')

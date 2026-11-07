@@ -40,6 +40,11 @@ class Project extends Model
         return $this->belongsTo(Group::class, 'group_id', 'group_id');
     }
 
+    public function groups()
+    {
+    return $this->hasMany(Group::class, 'project_id', 'project_id');
+    }
+
     public function parentProject()
     {
         return $this->belongsTo(Project::class, 'parent_project_id', 'project_id');
